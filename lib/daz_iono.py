@@ -302,7 +302,8 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
 
 # get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
 def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
-    if len(tecxr.time.values) == 25:   
+    if len(tecxr.time.values) == 25: 
+        # print('old CODE format, 25 values')  
         h_time = float(acqtime.strftime('%H'))
         m_time = float(acqtime.strftime('%M'))
         s_time = float(acqtime.strftime('%S'))
@@ -334,7 +335,8 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
         else:
             # previous attempt, but still too different from the S1_ETAD CODE outputs (that rotates the Earth towards the Sun..)
             tec = float(tecxr.interp(time=time_dec, lon=lon,lat=lat, method='cubic')) # should be better than linear, but maybe quadratic is more suitable?
-    elif len(tecxr.time.values) == 96:
+    elif len(tecxr.time.values) > 90: ##Normally tecxr should include each 15min data but, data for the following days cover from 00:00UT to 23:30UT only:6 - 9 Jan 2023, 11 Jan 2023, 13 - 15 Jan 2023, 17 - 18 Jan 2023, 22 Jan 2023. 
+        # print('JP-HR GIM format, 96 values')
         if rotate:
             # 3D interpolation with rotation as above reference
             try:
