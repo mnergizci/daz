@@ -301,7 +301,7 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
 
 
 # get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
-def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
+def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
     if len(tecxr.time.values) == 25: 
         # print('old CODE format, 25 values')  
         h_time = float(acqtime.strftime('%H'))
@@ -327,8 +327,8 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
             print(time_dec - pretime)
             print(time_dec - postime)
             #
-            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method='linear'))
-            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method='linear'))
+            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
+            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
             #
             tec = ((postime - time_dec) / (postime - pretime) * tec_val0
                        + (time_dec - pretime) / (postime - pretime) * tec_val1)
@@ -354,11 +354,11 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
             lon1 = lon + (acqtime - postime).total_seconds() / 86400 * 360. #TODO or postime-acqtime?
 
             # #
-            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method='linear'))
-            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method='linear'))
+            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method)) 
+            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
             
             tec = ((postime - acqtime).total_seconds() / (postime - pretime).total_seconds() * tec_val0
-                   + (acqtime - pretime).total_seconds() / (postime - pretime).total_seconds() * tec_val1)
+                   + (acqtime - pretime).total_seconds() / (postime - pretime).total_seconds() * tec_val1)     ##linear in time
         else:
             # If rotation is NOT enabled, perform standard cubic interpolation
             tec = float(tecxr.interp(time=acqtime, lon=lon, lat=lat, method='cubic'))  
