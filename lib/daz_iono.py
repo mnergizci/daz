@@ -324,8 +324,8 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
             #
             lon0 = lon + (time_dec - pretime) * 360. / 24.
             lon1 = lon + (time_dec - postime) * 360. / 24.
-            print(time_dec - pretime)
-            print(time_dec - postime)
+            # print(time_dec - pretime)
+            # print(time_dec - postime)
             #
             tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
             tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
