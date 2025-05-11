@@ -220,7 +220,7 @@ def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/c
     return ionix
 
 
-def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
+def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False, noJPL=False):
     """ Adapted from Reza Bordbari script, plus using functions from https://notebook.community/daniestevez/jupyter_notebooks/IONEX
     
     17/03/2025-(MN):function also helps to extract NASA JPL High Resolution vTEC values (15min, 1x1degree) at first. 
@@ -236,24 +236,31 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     #D = acqtime.strftime('%Y%m%d')
     #ipp = np.array([lat,lon])
     # check if exists:
-    fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc') ##priotarize JPL-HR GIM, this can be shrink in the future.
-    if fna:  
-        ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
-    else:
-        # JPL-HR GIM does not exist, try to download it.
-        ionix = download_code_data(acqtime, storedir)
-        fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc') ##priotarize JPL-HR GIM
-    
+
+    if not noJPL:
+        fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM
         if fna:  
-            ionix = os.path.join(storedir, fna[0])  # Found a different GIM file, use it
+            ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
         else:
-            # If JPL-HR GIM is still missing, fallback to CODE GIM
-            fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?') #CODE GIM
-            if fna:
-                ionix = os.path.join(storedir, fna[0])
+            # JPL-HR GIM does not exist, try to download it.
+            ionix = download_code_data(acqtime, storedir)
+            fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM again
+            if fna:  
+                ionix = os.path.join(storedir, fna[0])  # Found a different GIM file, use it
             else:
-                #If no CODE GIM is found, try to download it
-                ionix = download_code_data(acqtime, storedir)
+                ionix = None
+    else:
+        ionix = None
+
+    if not ionix:
+        # If JPL-HR GIM is missing or noJPL is True, fallback to CODE GIM
+        fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?')  # CODE GIM
+        if fna:
+            ionix = os.path.join(storedir, fna[0])
+        else:
+            # If no CODE GIM is found, try to download it
+            ionix = download_code_data(acqtime, storedir)
+    
     if not ionix:
         return False
     #else:
