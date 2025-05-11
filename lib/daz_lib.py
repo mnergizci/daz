@@ -111,6 +111,7 @@ def get_SET_for_frame_dazes(frameta, frame_esds, mm2px = 1/14000):
     ''' Function to calculate SET in azimuth [px]. Working ok, hopefully correct in scaling?'''
     lon = frameta['center_lon'][0]
     lat = frameta['center_lat'][0]
+    heading = frameta['heading'][0]
     centre_time = frameta['centre_time'][0]
     daz_tides_mm = []
     for edt in frame_esds.epochdate.values:
