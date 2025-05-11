@@ -11,7 +11,12 @@ except:
 
 #for iono correction
 import nvector as nv
-import iri2016
+try:
+    import iri2016
+except:
+    print('WARNING: iri2016 not found - please use only CODE corrections and set constant alpha')
+
+
 import pyproj
 import numpy as np
 import re
@@ -674,7 +679,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     heading = frameta['heading'].values[0]
     scene_center_lon = frameta['center_lon'].values[0]
     scene_center_lat = frameta['center_lat'].values[0]
-    resolution_of_pixel = frameta['azimuth_resolution'].values[0]
+    # resolution_of_pixel = frameta['azimuth_resolution'].values[0]
     try:
         range_avg = frameta['centre_range_ok_m'].values[0] # 2024: GAMMA had a bug wrongly informing on centre_range (may differ by 20 km or so!). fixed most of it
     except:

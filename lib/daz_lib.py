@@ -4,6 +4,7 @@
 import pandas as pd
 import numpy as np
 import datetime as dt
+import subprocess as subp
 try:
     from scipy.constants import speed_of_light
     from scipy.constants import pi
@@ -97,6 +98,28 @@ def get_SET_for_frame(frame, esds, framespd):
     #dtout, E, N, U = pysolid.calc_solid_earth_tides_point(lat, lon, dt0, dt1, step_sec=60)
     # and then need to extract the data towards epochs, and diff with the reference epoch before returning
     return True
+
+
+def get_SET_coords(lon,lat,epochdt):
+    cmd = "gmt earthtide -L{0}/{1} -T{2}".format(lon, lat, str(epochdt).replace(' ', 'T'))
+    tides = subp.check_output(cmd.split())
+    tides = tides.split()
+    ntide, etide, utide = float(tides[1]), float(tides[2]), float(tides[3])
+    return etide, ntide, utide
+
+def get_SET_for_frame_dazes(frameta, frame_esds, mm2px = 1/14000):
+    ''' Function to calculate SET in azimuth [px]. Working ok, hopefully correct in scaling?'''
+    lon = frameta['center_lon'][0]
+    lat = frameta['center_lat'][0]
+    centre_time = frameta['centre_time'][0]
+    daz_tides_mm = []
+    for edt in frame_esds.epochdate.values:
+        epochdtstr = str(edt) + 'T' + centre_time
+        E, N, U = get_SET_coords(lon,lat,epochdtstr)
+        daz_tide_mm = EN2azi(N, E, heading) * 1000
+        daz_tides_mm.append(daz_tide_mm)
+    daz_tides_mm = np.array(daz_tides_mm)
+    return daz_tides_mm * mm2px
 
 
 def get_tide_in_azimuth(lat, lon, hei, azi, time1):

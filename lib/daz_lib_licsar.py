@@ -110,10 +110,32 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
     return a[cols]
 
 
-def get_daz_frame(frame):
+def get_daz_frame(frame, fulloutput = True, include_corrections = False):
+    ''' Function to extract all frame daz values from the LiCSInfo database.
+
+    Args:
+        frame (str)                 LiCSAR frame ID
+        fulloutput (bool)           if True, will return all information from the database, otherwise only daz values [mm]
+        include_corrections (bool)  if True, will perform also SET and iono corrections and add to the table (or daz if False fulloutput)
+    '''
     polyid=lq.get_frame_polyid(frame)[0][0]
     daztb = lq.do_pd_query('select * from esd where polyid={};'.format(polyid))
-    return daztb
+    if include_corrections:
+        frameta = get_frameta(frame)
+        esds = extract2txt_esds_frame(frame)
+        esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
+        import daz_iono as di
+        daztb['daz_iono'] = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False, out_tec_master=False,
+                           out_tec_all=False, ionosource='code', use_iri_hei=False)
+        daztb['daz_SET'] = get_SET_for_frame_dazes(frameta, esds)
+    if fulloutput:
+        return daztb
+    else:
+        daz_mm = daztb.set_index('epoch')['daz'] * 14000
+        if include_corrections:
+            daz_mm.values = daz_mm.values - daztb['daz_iono'].values * 14000 - daztb['daz_SET'].values * 14000
+        return daz_mm
+
 
 
 def get_center_vel(parfile):
@@ -256,6 +278,53 @@ def extract_frame_master_s1abs(framespd):
         s1abs.append(get_frame_master_s1ab(frame))
     framespd['S1AorB'] = s1abs
     return framespd
+
+
+def get_frameta(frame):
+    a = pd.DataFrame()
+    tr = int(frame[:3])
+    metafile = os.path.join(os.environ['LiCSAR_public'], str(tr), frame, 'metadata', 'metadata.txt')
+    if not os.path.exists(metafile):
+        print('metadata file does not exist for frame ' + frame)
+        return False
+    primepoch = grep1line('master=', metafile).split('=')[1]
+    path_to_slcdir = os.path.join(os.environ['LiCSAR_procdir'], str(tr), frame, 'SLC', primepoch)
+    heading = float(grep1line('heading', metafile).split('=')[1])
+    azimuth_resolution = float(grep1line('azimuth_resolution', metafile).split('=')[1])
+    avg_incidence_angle = float(grep1line('avg_incidence_angle', metafile).split('=')[1])
+    try:
+        centre_range_m = float(grep1line('centre_range_ok_m', metafile).split('=')[1])
+    except:
+        centre_range_m = float(grep1line('centre_range_m', metafile).split('=')[1])
+    centre_time = grep1line('center_time', metafile).split('=')[1]
+    try:
+        dfDC, ka = get_dfDC(path_to_slcdir)
+    except:
+        print('some error occurred during frame ' + frame)
+        dfDC = 0
+        ka = 0
+    try:
+        hei = grep1line('avg_height', metafile).split('=')[1]
+    except:
+        print('no height information, returning 0 for frame ' + frame)
+        hei = 0
+    a['frame'] = [frame]
+    a['master'] = [primepoch]
+    a['heading'] = [heading]
+    a['azimuth_resolution'] = [azimuth_resolution]
+    a['avg_incidence_angle'] = [avg_incidence_angle]
+    a['centre_range_m'] = [centre_range_m]
+    a['centre_time'] = [centre_time]
+    a['ka'] = [ka]
+    a['dfDC'] = [dfDC]
+    a['avg_height'] = [hei]
+    framegeom = fc.get_frames_gpd([frame])
+    c = framegeom.geometry.centroid
+    lon = c[0].coords[0][0]
+    lat = c[0].coords[0][1]
+    a['center_lon'] = [lon]
+    a['center_lat'] = [lat]
+    return a
 
 
 def generate_framespd(fname = 'esds2021_frames.txt', outcsv = 'framespd_2021.csv'):
