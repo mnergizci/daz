@@ -243,6 +243,7 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     # check if exists:
 
     if not noJPL:
+        print('JPL-HR GIM data')
         fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM
         if fna:  
             ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
@@ -258,6 +259,7 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         ionix = None
 
     if not ionix:
+        print('CODE GIM data')
         # If JPL-HR GIM is missing or noJPL is True, fallback to CODE GIM
         fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?')  # CODE GIM
         if fna:
