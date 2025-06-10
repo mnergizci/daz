@@ -149,12 +149,32 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='iri', a
 
 
 def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono'):
-    instrings = ['CODG', 'CGIM']
-    #lastrings = ['I', 'N']
+    """Downloads Ionospheric TEC data from JPL or CODE."""
     ffound = False
-    for instr in instrings:
-        #for lastr in lastrings:
-        if not ffound:
+    if not ffound:
+        filename = 'jpld'+ acqtime.strftime('%j') + '0.' + acqtime.strftime('%y')+'i.nc.gz' # TODO: check YMD
+        url = 'https://sideshow.jpl.nasa.gov/pub/iono_daily/gim_for_research/jpld/' + str(acqtime.year) + '/' + filename
+        fullpath = os.path.join(storedir, filename)
+        ionix = fullpath[:-3]
+        if not os.path.exists(ionix):
+            if not os.path.exists(fullpath):
+                # download this
+                try:
+                    wget.download(url, out=storedir)
+                    ffound = True 
+                except:
+                    #print('jpl-hr not exist')
+                    ffound = False
+            if os.path.exists(fullpath):
+                ffound = True
+        else:
+            ffound = True
+    ###if JPL HR-GIM is not available, then try to download CODE data. After, 2024-08-01 we need CODE data. 
+    if not ffound:  
+        instrings = ['CODG', 'CGIM']
+        #lastrings = ['I', 'N']
+        for instr in instrings:
+            #for lastr in lastrings:
             filename = instr + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + 'I.Z'
             url = 'http://ftp.aiub.unibe.ch/CODE/' + acqtime.strftime('%Y') + '/' + filename
             fullpath = os.path.join(storedir, filename)
@@ -164,12 +184,16 @@ def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/c
                     # download this
                     try:
                         wget.download(url, out=storedir)
+                        ffound = True 
                     except:
+                        #print('code-oldname not exists')
                         ffound = False
                 if os.path.exists(fullpath):
                     ffound = True
             else:
                 ffound = True
+            if ffound:
+                break  #Exit loop if successful download
     # since 12/2022 they changed naming convention to e.g. COD0OPSFIN_20230510000_01D_01H_GIM.INX.gz
     # see https://cddis.nasa.gov/Data_and_Derived_Products/GNSS/atmospheric_products.html#iono
     if not ffound:
@@ -201,9 +225,12 @@ def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/c
     return ionix
 
 
-def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
+def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False, noJPL=False):
     """ Adapted from Reza Bordbari script, plus using functions from https://notebook.community/daniestevez/jupyter_notebooks/IONEX
-
+    
+    17/03/2025-(MN):function also helps to extract NASA JPL High Resolution vTEC values (15min, 1x1degree) at first. 
+    https://sideshow.jpl.nasa.gov/pub/iono_daily/gim_for_research/jpli/
+    
     Args:
         acqtime (dt.datetime)
         lat (float)
@@ -214,12 +241,33 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     #D = acqtime.strftime('%Y%m%d')
     #ipp = np.array([lat,lon])
     # check if exists:
-    fna = glob.glob(storedir+'/????'+ acqtime.strftime('%j') + '0.' + acqtime.strftime('%y')+ '?')
-    if fna:
-        ionix = os.path.join(storedir,fna[0])
+
+    if not noJPL:
+        print('JPL-HR GIM data')
+        fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM
+        if fna:  
+            ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
+        else:
+            # JPL-HR GIM does not exist, try to download it.
+            ionix = download_code_data(acqtime, storedir)
+            fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM again
+            if fna:  
+                ionix = os.path.join(storedir, fna[0])  # Found a different GIM file, use it
+            else:
+                ionix = None
     else:
-        # download:
-        ionix = download_code_data(acqtime, storedir)
+        ionix = None
+
+    if not ionix:
+        print('CODE GIM data')
+        # If JPL-HR GIM is missing or noJPL is True, fallback to CODE GIM
+        fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?')  # CODE GIM
+        if fna:
+            ionix = os.path.join(storedir, fna[0])
+        else:
+            # If no CODE GIM is found, try to download it
+            ionix = download_code_data(acqtime, storedir)
+    
     if not ionix:
         return False
     #else:
@@ -227,27 +275,39 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     # prep 
     #hhmmss=acqtime.strftime('%H%M%S')
     # loading the TEC maps, thanks to https://notebook.community/daniestevez/jupyter_notebooks/IONEX (but improved towards xarray by ML B-)
-    try:
-        tecmaps = get_tecmaps(ionix)
-    except:
-        print('ERROR loading ionix file: '+ionix)
-        return False
-    try:
-        interval = int(grep1line('INTERVAL',ionix).split()[0])
-    except:
-        print('ERROR, the ionix file '+ionix+' does not contain necessary keywords. Cancelling')
-        return False
-    timestep = interval/3600
-    timecoords = np.arange(0.0,24.0+timestep,timestep)  # we expect start/end time being midnight, should be standard for all CODE files?
-    lat_all = np.arange(87.5,-87.5-2.5,-2.5)
-    lon_all = np.arange(-180.0,180.0+5,5.0)
-    tecxr = xr.DataArray(data=tecmaps, dims=['time','lat','lon'],
-                        coords=dict(time=timecoords, lon=lon_all, lat=lat_all) )
-    # interpolate through the nan values
-    tonan=9999
-    tecxr.where(tecxr!=tonan)
-    tecxr=tecxr.interpolate_na(dim="lon", method="linear", fill_value="extrapolate")
-    tecxr = tecxr*1e+16 # from TECU
+    if os.path.basename(ionix).startswith('jpl'):
+        # Open the NetCDF file
+        ds = xr.open_dataset(ionix)
+        # Convert time epochs to readable datetime format, 15min resolution referenced to j2000 (1/1/2000 12:00 UT).
+        time_values = ds['time'].values
+        #converting yyyy-mm-ddThh:mm:ss format. #TODO: We can change that regarding ML's wishes. I found this is clear for now.
+        converted_times = pd.to_datetime(time_values, origin='2000-01-01 12:00:00', unit='s')
+        #dataset2dataarray
+        tecxr_jhr = xr.DataArray(data=ds['tecmap'].values, dims=['time','lat','lon'],
+                            coords=dict(time=converted_times, lat= ds["lat"].values, lon= ds["lon"].values) )
+        tecxr=tecxr_jhr*1e+16 # from TECU   
+    else:
+        try:
+            tecmaps = get_tecmaps(ionix)
+        except:
+            print('ERROR loading ionix file: '+ionix)
+            return False
+        try:
+            interval = int(grep1line('INTERVAL',ionix).split()[0])
+        except:
+            print('ERROR, the ionix file '+ionix+' does not contain necessary keywords. Cancelling')
+            return False
+        timestep = interval/3600
+        timecoords = np.arange(0.0,24.0+timestep,timestep)  # we expect start/end time being midnight, should be standard for all CODE files?
+        lat_all = np.arange(87.5,-87.5-2.5,-2.5)
+        lon_all = np.arange(-180.0,180.0+5,5.0)
+        tecxr = xr.DataArray(data=tecmaps, dims=['time','lat','lon'],
+                            coords=dict(time=timecoords, lon=lon_all, lat=lat_all) )
+        # interpolate through the nan values
+        tonan=9999
+        tecxr.where(tecxr!=tonan)
+        tecxr=tecxr.interpolate_na(dim="lon", method="linear", fill_value="extrapolate")
+        tecxr = tecxr*1e+16 # from TECU
     if return_fullxr:
         return tecxr
     else:
@@ -255,37 +315,67 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
 
 
 # get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
-def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True):
-    '''Function to be used with tecxr (output from get_vtec_from_code) to get the tec for given coords'''
-    h_time = float(acqtime.strftime('%H'))
-    m_time = float(acqtime.strftime('%M'))
-    s_time = float(acqtime.strftime('%S'))
-    # given time in decimal format
-    time_dec = h_time + (m_time/60) + (s_time / 3600)
-    # ML: 2023/08, based on : https://github.com/insarlab/MintPy/blob/main/src/mintpy/objects/ionex.py
-    # that is actually based on
-    # Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map exchange format
-    #         version 1.1. Paper presented at the Proceedings of the IGS AC workshop, Darmstadt, Germany.
-    if rotate:
-        # 3D interpolation with rotation as above reference
-        try:
-            htimes = tecxr.time.values
-        except:
-            htimes = np.array([float(tecxr.time)])  #in case of only one value
-        pretime = int(htimes[htimes <= time_dec][-1])
-        postime = int(htimes[htimes >= time_dec][0])
-        #
-        lon0 = lon + (time_dec - pretime) * 360. / 24.
-        lon1 = lon + (time_dec - postime) * 360. / 24.
-        #
-        tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method='linear'))
-        tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method='linear'))
-        #
-        tec = ((postime - time_dec) / (postime - pretime) * tec_val0
-                   + (time_dec - pretime) / (postime - pretime) * tec_val1)
-    else:
-        # previous attempt, but still too different from the S1_ETAD CODE outputs (that rotates the Earth towards the Sun..)
-        tec = float(tecxr.interp(time=time_dec, lon=lon,lat=lat, method='cubic')) # should be better than linear, but maybe quadratic is more suitable?
+def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
+    if len(tecxr.time.values) == 25: 
+        # print('old CODE format, 25 values')  
+        h_time = float(acqtime.strftime('%H'))
+        m_time = float(acqtime.strftime('%M'))
+        s_time = float(acqtime.strftime('%S'))
+        # given time in decimal format
+        time_dec = h_time + (m_time/60) + (s_time / 3600)
+        # ML: 2023/08, based on : https://github.com/insarlab/MintPy/blob/main/src/mintpy/objects/ionex.py
+        # that is actually based on
+        # Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map exchange format
+        #         version 1.1. Paper presented at the Proceedings of the IGS AC workshop, Darmstadt, Germany.
+        if rotate:
+            # 3D interpolation with rotation as above reference
+            try:
+                htimes = tecxr.time.values
+            except:
+                htimes = np.array([float(tecxr.time)])  #in case of only one value
+            pretime = int(htimes[htimes <= time_dec][-1])
+            postime = int(htimes[htimes >= time_dec][0])
+            #
+            lon0 = lon + (time_dec - pretime) * 360. / 24.
+            lon1 = lon + (time_dec - postime) * 360. / 24.
+            # print(time_dec - pretime)
+            # print(time_dec - postime)
+            #
+            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
+            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
+            #
+            tec = ((postime - time_dec) / (postime - pretime) * tec_val0
+                       + (time_dec - pretime) / (postime - pretime) * tec_val1)
+        else:
+            # previous attempt, but still too different from the S1_ETAD CODE outputs (that rotates the Earth towards the Sun..)
+            tec = float(tecxr.interp(time=time_dec, lon=lon,lat=lat, method='cubic')) # should be better than linear, but maybe quadratic is more suitable?
+    elif len(tecxr.time.values) > 90: ##Normally tecxr should include each 15min data but, data for the following days cover from 00:00UT to 23:30UT only:6 - 9 Jan 2023, 11 Jan 2023, 13 - 15 Jan 2023, 17 - 18 Jan 2023, 22 Jan 2023. 
+        # print('JP-HR GIM format, 96 values')
+        if rotate:
+            # 3D interpolation with rotation as above reference
+            try:
+                htimes = tecxr.time.values
+            except:
+                htimes = np.array([float(tecxr.time)])  #in case of only one value
+            # print(htimes)
+            pretime = htimes[htimes <= acqtime].max()
+            postime = htimes[htimes >= acqtime].min()
+            #convet to timestamps to play with total_seconds
+            pretime = pd.Timestamp(pretime)
+            postime = pd.Timestamp(postime)
+            
+            lon0 = lon + (acqtime - pretime).total_seconds() / 86400 * 360. #let's play with seconds 24x60x60(seconds per day)
+            lon1 = lon + (acqtime - postime).total_seconds() / 86400 * 360. #TODO or postime-acqtime?
+
+            # #
+            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method)) 
+            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
+            
+            tec = ((postime - acqtime).total_seconds() / (postime - pretime).total_seconds() * tec_val0
+                   + (acqtime - pretime).total_seconds() / (postime - pretime).total_seconds() * tec_val1)     ##linear in time
+        else:
+            # If rotation is NOT enabled, perform standard cubic interpolation
+            tec = float(tecxr.interp(time=acqtime, lon=lon, lat=lat, method='cubic'))  
     return tec
 
 

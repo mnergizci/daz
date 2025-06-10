@@ -1,3 +1,4 @@
 
 .idea/*
 .idea/inspectionProfiles/profiles_settings.xml
+lib/__pycache__/*
