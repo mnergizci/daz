@@ -20,13 +20,14 @@ Outputs :
 =====
 Usage
 =====
-daz_03_extract_iono.py [--indaz esds.csv] [--use_code] [--infra frames.csv] [--outfra frames_with_iono.csv] [--outdaz esds_with_iono.csv]
+daz_03_extract_iono.py [--indaz esds.csv] [--use_gim] [--infra frames.csv] [--outfra frames_with_iono.csv] [--outdaz esds_with_iono.csv]
 
 Notes:
-    --use_code  Will apply CODE to get TEC values rather than the default IRI2016 estimates. Note IRI2016 is still used to estimate iono peak altitude. Tested only in LiCSAR environment.
+    --use_gim  Will apply JPL GIM (or CODE if JPL data not available) to get TEC values rather than the default IRI2016 estimates. Note IRI2016 can still be used to estimate iono peak altitude. Tested only in LiCSAR environment.
 """
 #%% Change log
 '''
+v1.2 2025-06-12 ML imported codes by M. Nergizci to replace CODE for JPL GIM (proven better as with higher temporal sampling)
 v1.1 2023-08-10 Milan Lazecky, UoL
  - added option to get iono correction from CODE (combined with IRI2016 to estimate iono F2 peak altitude)
 v1.0 2022-01-03 Milan Lazecky, Uni of Leeds
@@ -63,16 +64,16 @@ def main(argv=None):
     #%% Read options
     try:
         try:
-            opts, args = getopt.getopt(argv[1:], "h", ["help", "use_code", "indaz=", "infra=", "outdaz=", "outfra="])
+            opts, args = getopt.getopt(argv[1:], "h", ["help", "use_gim", "indaz=", "infra=", "outdaz=", "outfra="])
         except getopt.error as msg:
             raise Usage(msg)
         for o, a in opts:
             if o == '-h' or o == '--help':
                 print(__doc__)
                 return 0
-            if o == '--use_code':
+            if o == '--use_gim':
                 ionosource = 'code'
-                print('using CODE for iono correction - note latest data might not be processed (will be stored as NaN in the csv)')
+                print('using GIM (primarily JPL, or CODE) for iono correction - note latest data might not be processed (will be stored as NaN in the csv)')
             elif o == "--indaz":
                 indazfile = a
             elif o == "--infra":
