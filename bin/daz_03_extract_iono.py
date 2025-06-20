@@ -102,6 +102,29 @@ def main(argv=None):
     #esds = pd.read_csv(indazfile)
     #framespd = pd.read_csv(inframesfile)
     esds, framespd = load_csvs(esdscsv = indazfile, framescsv = inframesfile)
+    ''' in case of using other csvs that already contained iono corr:
+    indazfile2='../esds_with_iono.csv'
+    inframesfile2='../frames_with_iono.csv'
+    esdsi, framespdi = load_csvs(esdscsv = indazfile2, framescsv = inframesfile2)
+    
+    i=framespdi[['frame','Hiono','Hiono_std','Hiono_range','tecs_A','tecs_B']]
+    outframespd=pd.merge(framespd,i,on='frame',how='inner')
+    
+    i=esdsi[['tecs_A','tecs_B','daz_iono_mm']]
+    esds=esds.reset_index(drop=True)
+    outesds=esds.combine_first(i)
+    outesds=outesds.reindex(columns=['frame', 'orbits_precision', 'epochdate', 'pod_diff_azi_m', 'S1AorB',
+        'daz_tide_mm', 'daz_mm', 'daz_cc_mm', 'years_since_beginning',
+        'daz_mm_notide','tecs_A', 'tecs_B', 'daz_iono_mm'])
+    outesds = outesds[outesds['daz_iono_mm']!=0]
+    col = 'daz_mm_notide'
+    esds=outesds
+    esds[col+'_noiono'] = esds[col] - esds['daz_iono_mm']
+    framespd=outframespd
+
+    esds.to_csv(outdazfile)
+    framespd.to_csv(outframesfile)
+    '''
     print('extra data cleaning step - perhaps should add to another step (first?)')
     esds, framespd = df_preprepare_esds(esds, framespd, firstdate = '', countlimit = 25)
     print('performing the iono calculation')

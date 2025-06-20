@@ -254,11 +254,13 @@ def plot_vel_esd_gmt(selected_frame_esds, frameta, mindate, maxdate, level1, lev
     #
     fig = pygmt.Figure()
     #
+    #ylabel = r'@[u_{az}@[ [mm]'
     fig.basemap(
         projection="X18c/6c",
         region=[mindate, maxdate, -300, 300], #datetime.date(2010, 1, 1), datetime.date(2020, 6, 1), 0, 10],
         #frame=["WSen", "af"],
         #frame=["WSne", "xaf", "yaf+l'daz [mm]'"]
+        #frame=["+t " + frame, "xa1Yfg1Y", "yafg100+l" + ylabel]
         frame=["+t "+frame, "xa1Yfg1Y", "yafg100+ldaz [mm]"]
     )
     #
