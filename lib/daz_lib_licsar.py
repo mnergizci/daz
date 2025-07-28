@@ -115,7 +115,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False):
 
     Args:
         frame (str)                 LiCSAR frame ID
-        fulloutput (bool)           if True, will return all information from the database, otherwise only daz values [mm]
+        fulloutput (bool)           if True, will return all information from the database (such as cc_rg), otherwise only daz values [mm]
         include_corrections (bool)  if True, will perform also SET and iono corrections and add to the table (or daz if False fulloutput)
     '''
     polyid=lq.get_frame_polyid(frame)[0][0]
@@ -125,9 +125,43 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False):
         esds = extract2txt_esds_frame(frame)
         esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
         import daz_iono as di
-        daztb['daz_iono'] = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False, out_tec_master=False,
-                           out_tec_all=False, ionosource='code', use_iri_hei=False)
+        daz_iono, tec_A_master, tec_B_master, tecs_A, tecs_B = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False,
+                                                                                     out_tec_all=True, ionosource='code', use_iri_hei=False)
+        daztb['daz_iono'] = daz_iono
         daztb['daz_SET'] = get_SET_for_frame_dazes(frameta, esds)
+        if fulloutput:
+            import rioxarray
+            # getting drg iono:
+            tecs = (np.array(tecs_A) + np.array(tecs_B)) / 2
+            k = 40.308193  # m^3 / s^2
+            f0 = 5.4050005e9  # 1/s
+            tec_ref = (tec_A_master + tec_B_master) / 2
+            daztb['drg_iono_mm'] = 1000* (tecs - tec_ref) * k / (f0 * f0) # in mm
+            # SET for drg --- we need to get ENUs:
+            geoframedir = os.path.join(os.environ['LiCSAR_public'], str(int(frame[:3])), frame)
+            e = os.path.join(geoframedir, 'metadata', frame + '.geo.E.tif')
+            n = os.path.join(geoframedir, 'metadata', frame+'.geo.N.tif')
+            u = os.path.join(geoframedir, 'metadata', frame + '.geo.U.tif')
+            lon = frameta['center_lon'][0]
+            lat = frameta['center_lat'][0]
+            centre_time = frameta['centre_time'][0]
+            try:
+                e = rioxarray.open_rasterio(e).squeeze('band').drop('band')
+                n = rioxarray.open_rasterio(n).squeeze('band').drop('band')
+                u = rioxarray.open_rasterio(u).squeeze('band').drop('band')
+                e = float(e.where(e != 0).median())
+                n = float(n.where(n != 0).median())
+                u = float(u.where(u != 0).median())
+                drg_tides_mm = []
+                for edt in esds.epochdate.values:
+                    epochdtstr = str(edt) + 'T' + centre_time
+                    E, N, U = get_SET_coords(lon, lat, epochdtstr)
+                    drg_tide_m = E*e + N*n + U*u
+                    drg_tides_mm.append(1000*drg_tide_m)
+                drg_tides_mm = np.array(drg_tides_mm)
+                daztb['drg_SET_mm'] = drg_tides_mm
+            except:
+                print('some issue getting range SET corrections..')
     if fulloutput:
         return daztb
     else:
