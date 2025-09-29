@@ -2,8 +2,8 @@
 '''
 import os, glob
 import daz_lib_licsar as dll
-for tr in range(175)+1:
-    trfrs=glob.glob(str(tr)+'/???[A,D]_?????_??????')
+for tr in range(175):
+    trfrs=glob.glob(str(tr+1)+'/???[A,D]_?????_??????')
     for trfr in trfrs:
         fr=trfr.split('/')[1]
         print(fr)
