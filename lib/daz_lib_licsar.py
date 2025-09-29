@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
+'''
+import os, glob
+import daz_lib_licsar as dll
+for tr in range(175)+1:
+    trfrs=glob.glob(str(tr)+'/???[A,D]_?????_??????')
+    for trfr in trfrs:
+        fr=trfr.split('/')[1]
+        print(fr)
+        outcsv = os.path.join(trfr, 'metadata', fr+'.azirg.csv')
+        if not os.path.exists(outcsv):
+            try:
+                a=dll.get_daz_frame(fr, True, True)
+                a[['epoch','daz','cc_azi','cc_range','daz_iono','daz_SET','drg_iono_mm', 'dTECS', 'drg_SET_mm']].to_csv(outcsv)
+            except:
+                print('error with frame '+fr)
 
+'''
 import LiCSquery as lq
 import numpy as np
 from LiCSAR_lib.LiCSAR_misc import *
