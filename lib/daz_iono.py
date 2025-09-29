@@ -136,7 +136,7 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='iri', a
             except:
                 # CODE data is not available earlier than with 6 months delay.. or more?
                 tec = np.nan
-                print('No CODE data for date '+str(acqtime.date())+'. Setting NaN.')
+                print('No JPL/CODE data for date '+str(acqtime.date())+'. Setting NaN.')
             # decrease the value by some alpha... we expect alpha % of TEC being below the satellite.. should be improved
             #alpha = 0.85
             tec = alpha*tec
@@ -225,7 +225,7 @@ def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/c
     return ionix
 
 
-def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False, noJPL=False):
+def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False, noJPL=False, printout=True):
     """ Adapted from Reza Bordbari script, plus using functions from https://notebook.community/daniestevez/jupyter_notebooks/IONEX
     
     17/03/2025-(MN):function also helps to extract NASA JPL High Resolution vTEC values (15min, 1x1degree) at first. 
@@ -243,7 +243,8 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     # check if exists:
 
     if not noJPL:
-        print('JPL-HR GIM data')
+        if printout:
+            print('JPL-HR GIM data')
         fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM
         if fna:  
             ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
@@ -259,7 +260,8 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         ionix = None
 
     if not ionix:
-        print('CODE GIM data')
+        if printout:
+            print('CODE GIM data')
         # If JPL-HR GIM is missing or noJPL is True, fallback to CODE GIM
         fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?')  # CODE GIM
         if fna:
