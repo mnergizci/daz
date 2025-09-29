@@ -137,6 +137,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False):
             f0 = 5.4050005e9  # 1/s
             tec_ref = (tec_A_master + tec_B_master) / 2
             daztb['drg_iono_mm'] = 1000* (tecs - tec_ref) * k / (f0 * f0) # in mm
+            daztb['dTECS'] = tecs - tec_ref  # for later correlation to azi shift (seems abs TEC plays role!)
             # SET for drg --- we need to get ENUs:
             geoframedir = os.path.join(os.environ['LiCSAR_public'], str(int(frame[:3])), frame)
             e = os.path.join(geoframedir, 'metadata', frame + '.geo.E.tif')
