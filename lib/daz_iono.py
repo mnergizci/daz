@@ -369,7 +369,7 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
                 postime = htimes[htimes >= acqtime].min()
             except:
                 print('warning, acqtime after the data points')
-                pretime = htimes[-1]
+                postime = htimes[-1]
             
             #convert to timestamps to play with total_seconds
             pretime = pd.Timestamp(pretime)
