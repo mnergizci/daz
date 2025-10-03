@@ -360,9 +360,18 @@ def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
             except:
                 htimes = np.array([float(tecxr.time)])  #in case of only one value
             # print(htimes)
-            pretime = htimes[htimes <= acqtime].max()
-            postime = htimes[htimes >= acqtime].min()
-            #convet to timestamps to play with total_seconds
+            try:
+                pretime = htimes[htimes <= acqtime].max()
+            except:
+                print('warning, acqtime before the data points')
+                pretime = htimes[0]
+            try:
+                postime = htimes[htimes >= acqtime].min()
+            except:
+                print('warning, acqtime after the data points')
+                pretime = htimes[-1]
+            
+            #convert to timestamps to play with total_seconds
             pretime = pd.Timestamp(pretime)
             postime = pd.Timestamp(postime)
             
