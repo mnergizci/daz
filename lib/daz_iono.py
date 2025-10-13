@@ -301,6 +301,7 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
             return False
         timestep = interval/3600
         timecoords = np.arange(0.0,24.0+timestep,timestep)  # we expect start/end time being midnight, should be standard for all CODE files?
+        timecoords = acqtime.normalize() + pd.to_timedelta(timecoords, unit='h')  # set to real datetime..
         lat_all = np.arange(87.5,-87.5-2.5,-2.5)
         lon_all = np.arange(-180.0,180.0+5,5.0)
         tecxr = xr.DataArray(data=tecmaps, dims=['time','lat','lon'],
