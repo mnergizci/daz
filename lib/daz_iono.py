@@ -318,67 +318,75 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
 
 
 # get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
-def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='linear'):
-    if len(tecxr.time.values) == 25: 
-        # print('old CODE format, 25 values')  
-        h_time = float(acqtime.strftime('%H'))
-        m_time = float(acqtime.strftime('%M'))
-        s_time = float(acqtime.strftime('%S'))
-        # given time in decimal format
-        time_dec = h_time + (m_time/60) + (s_time / 3600)
-        # ML: 2023/08, based on : https://github.com/insarlab/MintPy/blob/main/src/mintpy/objects/ionex.py
-        # that is actually based on
-        # Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map exchange format
-        #         version 1.1. Paper presented at the Proceedings of the IGS AC workshop, Darmstadt, Germany.
-        if rotate:
-            # 3D interpolation with rotation as above reference
-            try:
-                htimes = tecxr.time.values
-            except:
-                htimes = np.array([float(tecxr.time)])  #in case of only one value
-            pretime = int(htimes[htimes <= time_dec][-1])
-            postime = int(htimes[htimes >= time_dec][0])
-            #
-            lon0 = lon + (time_dec - pretime) * 360. / 24.
-            lon1 = lon + (time_dec - postime) * 360. / 24.
-            # print(time_dec - pretime)
-            # print(time_dec - postime)
-            #
-            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
-            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
-            #
-            tec = ((postime - time_dec) / (postime - pretime) * tec_val0
-                       + (time_dec - pretime) / (postime - pretime) * tec_val1)
-        else:
-            # previous attempt, but still too different from the S1_ETAD CODE outputs (that rotates the Earth towards the Sun..)
-            tec = float(tecxr.interp(time=time_dec, lon=lon,lat=lat, method='cubic')) # should be better than linear, but maybe quadratic is more suitable?
-    elif len(tecxr.time.values) > 90: ##Normally tecxr should include each 15min data but, data for the following days cover from 00:00UT to 23:30UT only:6 - 9 Jan 2023, 11 Jan 2023, 13 - 15 Jan 2023, 17 - 18 Jan 2023, 22 Jan 2023. 
-        # print('JP-HR GIM format, 96 values')
-        if rotate:
-            # 3D interpolation with rotation as above reference
-            try:
-                htimes = tecxr.time.values
-            except:
-                htimes = np.array([float(tecxr.time)])  #in case of only one value
-            # print(htimes)
-            pretime = htimes[htimes <= acqtime].max()
-            postime = htimes[htimes >= acqtime].min()
-            #convet to timestamps to play with total_seconds
-            pretime = pd.Timestamp(pretime)
-            postime = pd.Timestamp(postime)
-            
-            lon0 = lon + (acqtime - pretime).total_seconds() / 86400 * 360. #let's play with seconds 24x60x60(seconds per day)
-            lon1 = lon + (acqtime - postime).total_seconds() / 86400 * 360. #TODO or postime-acqtime?
+def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='cubic'):
+    '''
+    This will get VTEC from the xr TEC dataset for given acqtime (dt.datetime or pd.Timestamp), lat, lon.
+    It is recommended to use 'rotate' that does the 3D interpolation with rotation based on:
+      https://github.com/insarlab/MintPy/blob/main/src/mintpy/objects/ionex.py
+    that is actually based on
+    Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map exchange format
+            version 1.1. Paper presented at the Proceedings of the IGS AC workshop, Darmstadt, Germany.
+    '''
+    # if len(tecxr.time.values) == 25:
+    #     # print('old CODE format, 25 values')
+    #     h_time = float(acqtime.strftime('%H'))
+    #     m_time = float(acqtime.strftime('%M'))
+    #     s_time = float(acqtime.strftime('%S'))
+    #     # given time in decimal format
+    #     time_dec = h_time + (m_time/60) + (s_time / 3600)
+    #     # ML: 2023/08, based on : https://github.com/insarlab/MintPy/blob/main/src/mintpy/objects/ionex.py
+    #     # that is actually based on
+    #     # Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map exchange format
+    #     #         version 1.1. Paper presented at the Proceedings of the IGS AC workshop, Darmstadt, Germany.
+    #     if rotate:
+    #         # 3D interpolation with rotation as above reference
+    #         try:
+    #             htimes = tecxr.time.values
+    #         except:
+    #             htimes = np.array([float(tecxr.time)])  #in case of only one value
+    #         pretime = int(htimes[htimes <= time_dec][-1])
+    #         postime = int(htimes[htimes >= time_dec][0])
+    #         #
+    #         lon0 = lon + (time_dec - pretime) * 360. / 24.
+    #         lon1 = lon + (time_dec - postime) * 360. / 24.
+    #         # print(time_dec - pretime)
+    #         # print(time_dec - postime)
+    #         #
+    #         tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
+    #         tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
+    #         #
+    #         tec = ((postime - time_dec) / (postime - pretime) * tec_val0
+    #                    + (time_dec - pretime) / (postime - pretime) * tec_val1)
+    #     else:
+    #         # previous attempt, but still too different from the S1_ETAD CODE outputs (that rotates the Earth towards the Sun..)
+    #         tec = float(tecxr.interp(time=time_dec, lon=lon,lat=lat, method=method)) # should be better than linear, but maybe quadratic is more suitable?
+    # elif len(tecxr.time.values) > 90: ##Normally tecxr should include each 15min data but, data for the following days cover from 00:00UT to 23:30UT only:6 - 9 Jan 2023, 11 Jan 2023, 13 - 15 Jan 2023, 17 - 18 Jan 2023, 22 Jan 2023.
+    #     # print('JP-HR GIM format, 96 values')
+    if rotate:
+        # 3D interpolation with rotation as above reference
+        try:
+            htimes = tecxr.time.values
+        except:
+            htimes = np.array([float(tecxr.time)])  #in case of only one value
+        # print(htimes)
+        pretime = htimes[htimes <= acqtime].max()
+        postime = htimes[htimes >= acqtime].min()
+        #convet to timestamps to play with total_seconds
+        pretime = pd.Timestamp(pretime)
+        postime = pd.Timestamp(postime)
 
-            # #
-            tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method)) 
-            tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
-            
-            tec = ((postime - acqtime).total_seconds() / (postime - pretime).total_seconds() * tec_val0
-                   + (acqtime - pretime).total_seconds() / (postime - pretime).total_seconds() * tec_val1)     ##linear in time
-        else:
-            # If rotation is NOT enabled, perform standard cubic interpolation
-            tec = float(tecxr.interp(time=acqtime, lon=lon, lat=lat, method='cubic'))  
+        lon0 = lon + (acqtime - pretime).total_seconds() / 86400 * 360. #let's play with seconds 24x60x60(seconds per day)
+        lon1 = lon + (acqtime - postime).total_seconds() / 86400 * 360. #TODO or postime-acqtime?
+
+        # #
+        tec_val0 = float(tecxr.interp(time=pretime, lon=lon0, lat=lat, method=method))
+        tec_val1 = float(tecxr.interp(time=postime, lon=lon1, lat=lat, method=method))
+
+        tec = ((postime - acqtime).total_seconds() / (postime - pretime).total_seconds() * tec_val0
+               + (acqtime - pretime).total_seconds() / (postime - pretime).total_seconds() * tec_val1)     ##linear in time
+    else:
+        # If rotation is NOT enabled, perform standard cubic interpolation
+        tec = float(tecxr.interp(time=acqtime, lon=lon, lat=lat, method=method))
     return tec
 
 
