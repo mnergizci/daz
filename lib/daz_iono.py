@@ -412,8 +412,107 @@ def get_tec(tecmap, lat, lon):
     return tecmap[i,j]
 
 
+# not used :
+#def julian_to_datetime(julian_date):
+#    # Julian date of the Unix epoch (1970-01-01)
+#    julian_epoch = 2440587.5
+#    # Convert to seconds since Unix epoch
+#    seconds = (julian_date - julian_epoch) * 86400.0
+#    return datetime.utcfromtimestamp(seconds)
+
+def get_f107_table(url='https://spaceweather.gc.ca/solar_flux_data/daily_flux_values/fluxtable.txt'):
+    ftable = pd.read_csv(url, sep='\s+', skiprows=[1])
+    #ftable['fluxdt'] = ftable['fluxjulian'].apply(julian_to_datetime)
+    ftable['fluxdatetime'] = pd.to_datetime(
+        ftable['fluxdate'].astype(str) + ftable['fluxtime'].astype(str),
+        format='%Y%m%d%H%M%S'
+    )
+    ftable = ftable.set_index('fluxdatetime')
+    ftable = ftable.sort_index()
+    return ftable
 
 
+def get_f107_dt(dtime, ftable=None, colname='fluxadjflux'):
+    if type(ftable) == type(None):
+        ftable = get_f107_table()
+    interpolated = ftable[colname].reindex(
+        ftable.index.union([dtime])
+    ).interpolate(method='time')
+    return interpolated.loc[dtime]
+
+
+def drive_iri_with_gim(lat, lon, time, GIM_VTEC, f107):
+    """
+    Adjusts IRI NmF2 and hmF2 to match GIM VTEC.
+
+    Args:
+        lat: Latitude (degrees).
+        lon: Longitude (degrees).
+        time: datetime object.
+        GIM_VTEC: GIM VTEC value (TECU).
+        f107: F10.7 solar radio flux index.
+
+    Returns:
+        IRI electron density profile, adjusted NmF2, adjusted hmF2.
+    """
+
+    iri = iri2016.IRI # sm.SpacepyModel('iri2016')  # Or whichever version you use
+    iri['year'] = time.year
+    iri['month'] = time.month
+    iri['day'] = time.day
+    iri['hour'] = time.hour
+    iri['minute'] = time.minute
+    iri['sec'] = time.second
+    iri['glat'] = lat
+    iri['glon'] = lon
+    iri['altkm'] = np.arange(80, 1000, 10)  # Altitude range (km)
+    iri['f107'] = f107
+    iri['f107a'] = f107 # smoothed F10.7
+    iri.run()
+
+    IRI_TEC_initial = iri['tec'].item() #extract total TEC from 0 to 2000km altitude (or a high altitude)
+    NmF2_initial = iri['nmax'].item()
+    hmF2_initial = iri['hmax'].item()
+
+    NmF2 = NmF2_initial
+    hmF2 = hmF2_initial
+    tolerance = 0.1  # TECU
+    max_iterations = 10
+
+    for i in range(max_iterations):
+        NmF2_new = NmF2 * (GIM_VTEC / IRI_TEC_initial)
+        NmF2 = NmF2_new
+        iri['nmf2'] = NmF2  # Set NmF2 manually
+
+        iri.run() # rerun with new Nmf2
+
+        IRI_TEC = iri['tec'].item()
+        difference = GIM_VTEC - IRI_TEC
+        print(f"Iteration {i+1}: IRI TEC = {IRI_TEC:.2f}, GIM TEC = {GIM_VTEC:.2f}, Difference = {difference:.2f}")
+
+        if abs(difference) < tolerance:
+            print("Convergence achieved!")
+            break
+
+    return iri['ne'], NmF2, hmF2
+
+
+'''
+# Example usage:
+import datetime
+lat = 34.0  # Latitude
+lon = -118.0 # Longitude
+time = datetime.datetime(2023, 10, 27, 12, 0, 0)  # Example time
+GIM_VTEC = 30.0  # Example GIM VTEC value (TECU)
+f107 = 150.0  # Example F10.7 index
+
+ne_profile, adjusted_NmF2, adjusted_hmF2 = drive_iri_with_gim(lat, lon, time, GIM_VTEC, f107)
+
+print(f"Adjusted NmF2: {adjusted_NmF2:.2f}")
+print(f"Adjusted hmF2: {adjusted_hmF2:.2f}")
+
+#Now you can extract the Ne (electron density profile) from iri.
+'''
 
 
 
