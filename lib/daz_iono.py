@@ -12,9 +12,13 @@ except:
 #for iono correction
 import nvector as nv
 try:
-    import iri2016
+    import iri2020 as iri
 except:
-    print('WARNING: iri2016 not found - please use only CODE corrections and set constant alpha')
+    print('iri2020 not found, trying iri2016')
+    try:
+        import iri2016 as iri
+    except:
+        print('WARNING: iri2016 not found - please use only CODE corrections and set constant alpha')
 
 
 import pyproj
@@ -39,7 +43,7 @@ def extract_iono_full(esds, framespd, ionosource = 'iri', use_iri_hei=True):
     
     Args:
         ionosource (str):   either 'iri' or 'code'
-        use_iri_hei (bool): estimating F2 peak altitude using IRI2016. CODE is valid for 450 km, so might be better to set this OFF for using CODE
+        use_iri_hei (bool): estimating F2 peak altitude using IRI (recommended), otherwise the 'valid' height of GIM is used (450 km)
     Returns:
         esds, framespd
     """
@@ -99,19 +103,22 @@ def extract_iono_full(esds, framespd, ionosource = 'iri', use_iri_hei=True):
 # step 3 - get daz iono
 ################### IONOSPHERE 
 
-def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='iri', alpha = 0.85):
+def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', alpha = 0.85, returnalpha = False):
     '''Gets estimated TEC over given point, up to given altitude
     
     Args:
         glat, glon, altitude: coordinates and max 'iono height' to get the TEC values for. Altitude is in km
         acq_times (list of dt.datetime): time stamps to get the TEC over the given point
         returnhei (boolean):  if True, it would return TEC values but also estimated F2 peak heights (from IRI)
-        source (str): source of TEC - either 'iri' for IRI2016 model (must be installed), or 'code' to autodownload from CODE
+        source (str): source of TEC - either 'iri' for IRI2016 model (must be installed), 'code' to autodownload from CODE GIM, 'jpl' to use JPL HRES GIM (would fallback to CODE), or 'jpliri' to drive the JPL GIM using IRI2020
         alpha (float): for CODE only, estimate of ratio of TEC towards 'to the satellite only'. If 'auto', it will estimate it using iri. 0.85 is good value
+        returnalpha (bool): if True, will also return alpha param (useful with alpha = 'auto')
     '''
+    if source == 'jpl':
+        source = 'code'  # TODO.. for now, both CODE and JPL will try JPL first..
     if glon > 180:
         glon = glon - 180  # fix round-earth
-    if returnhei and source == 'code':
+    if returnhei and source != 'iri':
         print('WARNING, height is estimated only through IRI model, now setting to it')
         source = 'iri'
     if alpha == 'auto':
@@ -121,16 +128,22 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='iri', a
     altkmrange = [0, altitude, altitude]
     TECs = []
     heis = []
+    alphas = []
+    if source == 'jpliri':
+        ftable = get_f107_table()
     for acqtime in acq_times:
         if source == 'iri':
-            iri_acq = iri2016.IRI(acqtime, altkmrange, glat, glon )
+            iri_acq = iri.IRI(acqtime, altkmrange, glat, glon )
             TECs.append(iri_acq.TEC.values[0])
             heis.append(iri_acq.hmF2.values[0])
+            alphas.append(np.nan)
         elif source == 'code':
             if getalpha:
-                iri_acq_gps = iri2016.IRI(acqtime, [0, 20000, 20000], glat, glon )
-                iri_acq = iri2016.IRI(acqtime, altkmrange, glat, glon )
+                iri_acq_gps = iri.IRI(acqtime, [0, 20000, 20000], glat, glon )
+                iri_acq = iri.IRI(acqtime, altkmrange, glat, glon )
                 alpha = float(iri_acq.TEC/iri_acq_gps.TEC)
+                print('using alpha of '+str(alpha))
+            alphas.append(alpha)
             try:
                 tec = get_vtec_from_code(acqtime, glat, glon)
             except:
@@ -141,10 +154,23 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='iri', a
             #alpha = 0.85
             tec = alpha*tec
             TECs.append(tec)
+        elif source == 'jpliri':
+            # testing - 2025-10-23
+            # import iri2020 as iri
+            vtec = get_vtec_from_code(acqtime, glat, glon)
+            f107 = get_f107_dt(acqtime, ftable)
+            drive_iri_with_gim(glat, glon, acqtime, vtec, f107)
+            alphas.append(alpha)
     if returnhei:
-        return TECs, heis
+        if returnalpha:
+            return TECs, heis, alphas
+        else:
+            return TECs, heis
     else:
-        return TECs
+        if returnalpha:
+            return TECs, alphas
+        else:
+            return TECs
 
 
 
@@ -435,69 +461,98 @@ def get_f107_table(url='https://spaceweather.gc.ca/solar_flux_data/daily_flux_va
 def get_f107_dt(dtime, ftable=None, colname='fluxadjflux'):
     if type(ftable) == type(None):
         ftable = get_f107_table()
-    interpolated = ftable[colname].reindex(
-        ftable.index.union([dtime])
-    ).interpolate(method='time')
-    return interpolated.loc[dtime]
+    dtimes_numeric = ftable.index.values.astype('datetime64[ns]').astype(np.int64)
+    #np.array([dt.value for dt in ftable.index.values], dtype=np.float64)  # .value gives nanoseconds since epoch
+    target_numeric = pd.Timestamp(dtime).value
+    # Perform linear interpolation
+    return np.interp(target_numeric, dtimes_numeric, ftable[colname].values)
 
-
-def drive_iri_with_gim(lat, lon, time, GIM_VTEC, f107):
+'''
+unfinished attempt (tried to get chatgpt-supported answer...)
+def drive_iri_with_gim(lat, lon, acqtime, GIM_VTEC, f107):
     """
     Adjusts IRI NmF2 and hmF2 to match GIM VTEC.
 
     Args:
         lat: Latitude (degrees).
         lon: Longitude (degrees).
-        time: datetime object.
+        acqtime: pd.timestamp or datetime object.
         GIM_VTEC: GIM VTEC value (TECU).
         f107: F10.7 solar radio flux index.
 
     Returns:
         IRI electron density profile, adjusted NmF2, adjusted hmF2.
     """
+import iri2020 # import runiri
+try:
+    time = acqtime.to_pydatetime()
+except:
+    time = acqtime
+altkmrange = [0,20000,10]
+iri_acq = iri2020.IRI(acqtime, altkmrange, glat, glon )
+hmf2 =  float(iri_acq['hmF2'])
+maxtec_alt = float(iri_acq.alt_km[iri_acq.ne.argmax()])
 
-    iri = iri2016.IRI # sm.SpacepyModel('iri2016')  # Or whichever version you use
-    iri['year'] = time.year
-    iri['month'] = time.month
-    iri['day'] = time.day
-    iri['hour'] = time.hour
-    iri['minute'] = time.minute
-    iri['sec'] = time.second
-    iri['glat'] = lat
-    iri['glon'] = lon
-    iri['altkm'] = np.arange(80, 1000, 10)  # Altitude range (km)
-    iri['f107'] = f107
-    iri['f107a'] = f107 # smoothed F10.7
-    iri.run()
+timedatetime.datetime(2023, 3, 21, 12)  # UTC datetime
+glat = 45.0   # Latitude in degrees
+glon = -75.0  # Longitude in degrees
+alt_km = 300  # Altitude in km
+f107 = 150.0  # Custom F10.7 value
+f107a = 150.0 # 81-day average F10.7
+ap = 4        # Ap index
 
-    IRI_TEC_initial = iri['tec'].item() #extract total TEC from 0 to 2000km altitude (or a high altitude)
-    NmF2_initial = iri['nmax'].item()
-    hmF2_initial = iri['hmax'].item()
+iri = runiri(
+    dtime=time,
+    glat=glat,
+    glon=glon,
+    alts_km=[alt_km],
+    f107=f107,
+    f107a=f107a,  # optional, see below
+    jf=[1]*50
+)
 
-    NmF2 = NmF2_initial
-    hmF2 = hmF2_initial
-    tolerance = 0.1  # TECU
-    max_iterations = 10
+iri = iri2016.IRI # sm.SpacepyModel('iri2016')  # Or whichever version you use
+iri['year'] = time.year
+iri['month'] = time.month
+iri['day'] = time.day
+iri['hour'] = time.hour
+iri['minute'] = time.minute
+iri['sec'] = time.second
+iri['glat'] = lat
+iri['glon'] = lon
+iri['altkm'] = np.arange(80, 1000, 10)  # Altitude range (km)
+iri['f107'] = f107
+iri['f107a'] = f107 # smoothed F10.7
+iri.run()
 
-    for i in range(max_iterations):
-        NmF2_new = NmF2 * (GIM_VTEC / IRI_TEC_initial)
-        NmF2 = NmF2_new
-        iri['nmf2'] = NmF2  # Set NmF2 manually
+IRI_TEC_initial = iri_acq['TEC'].item() #extract total TEC from 0 to 2000km altitude (or a high altitude)
 
-        iri.run() # rerun with new Nmf2
+NmF2_initial = iri_acq['NmF2'].item()
+hmF2_initial = iri_acq['hmF2'].item()
 
-        IRI_TEC = iri['tec'].item()
-        difference = GIM_VTEC - IRI_TEC
-        print(f"Iteration {i+1}: IRI TEC = {IRI_TEC:.2f}, GIM TEC = {GIM_VTEC:.2f}, Difference = {difference:.2f}")
+NmF2 = NmF2_initial
+hmF2 = hmF2_initial
+tolerance = 0.1  # TECU
+max_iterations = 10
 
-        if abs(difference) < tolerance:
-            print("Convergence achieved!")
-            break
+for i in range(max_iterations):
+    NmF2_new = NmF2 * (GIM_VTEC / IRI_TEC_initial)
+    NmF2 = NmF2_new
+    iri_acq['NmF2'] = NmF2  # Set NmF2 manually
+
+    iri.run() # rerun with new Nmf2
+
+    IRI_TEC = iri['tec'].item()
+    difference = GIM_VTEC - IRI_TEC
+    print(f"Iteration {i+1}: IRI TEC = {IRI_TEC:.2f}, GIM TEC = {GIM_VTEC:.2f}, Difference = {difference:.2f}")
+
+    if abs(difference) < tolerance:
+        print("Convergence achieved!")
+        break
 
     return iri['ne'], NmF2, hmF2
 
 
-'''
 # Example usage:
 import datetime
 lat = 34.0  # Latitude
@@ -763,7 +818,8 @@ def get_abs_iono_corr(frame,esds,framespd):
     return daz_iono
 '''
 
-def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = False, out_tec_master = False, out_tec_all = False, ionosource='iri', use_iri_hei=False):
+def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = False, out_tec_master = False,
+                       out_tec_all = False, ionosource='iri', use_iri_hei=False, alpha = 0.85):
     ''' Function to calculate iono correction for a given frame.
 
     Args:
@@ -776,6 +832,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         out_tec_all (bool)
         ionosource (str)            iri or code (for IRI2016 or CODE GIM-based ionosphere. the latter improves RMSE!)
         use_iri_hei (bool)          if True, it estimates F2 peak altitude using IRI2016 and uses for the correction (with any ionosource). NOTE, CODE data are for 450 km ALT! so better not use_iri_hei..
+        alpha (float or 'auto')     only for code (/jpl) source. If 'auto', it would estimate it using IRI model
 
     Notes: 'liang' method should include also some extra F2 height correction..
     2023/08: Liang method was first implemented here and a lot happened since that time.. Please consider it obsolete.
@@ -837,7 +894,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     # 2024: not clear if IRI2016 F2 peak altitude is correct. Allowing the standard 450 km assumption by CODE (I think TECs will get scaled, so the gradient should be still ok. Not tested)
     if use_iri_hei or out_hionos:
         # get hionos in that middle point:
-        tecs, hionos = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, returnhei = True)
+        tecs, hionos = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True)
         hiono_master = hionos[-1]
         selected_frame_esds['hiono'] = hionos[:-1]  ###*1000 # convert to metres, avoid last measure, as this is 'master'
         df['hiono'] = hionos
@@ -853,8 +910,10 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     tecs_B = []
     #for hiono in hionos:
     for i,a in df.iterrows():
-        hiono = a['hiono']*1000 # m
+        hiono = float(a['hiono']*1000) # m
         epochdate = a['epochdate']
+        print('running for epochtime: '+str(epochdate))
+        print('assuming peak iono alt of : '+str(int(hiono/1000))+' km')
         # first, get IPP - ionosphere pierce point
         # range to IPP can be calculated using:
         # range_IPP = hiono/np.sin(theta)
@@ -876,8 +935,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
         PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
         ######### get TECS for A, B
-        TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource)[0]
-        TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource)[0]
+        TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+        TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
         # get inc angle at IPP - see iono. single layer model function
         earth_radius = 6378160 # m
         sin_thetaiono = earth_radius/(earth_radius+hiono) * np.sin(theta)
