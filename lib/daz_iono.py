@@ -136,7 +136,11 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
             iri_acq = iri.IRI(acqtime, altkmrange, glat, glon )
             TECs.append(iri_acq.TEC.values[0])
             heis.append(iri_acq.hmF2.values[0])
-            alphas.append(np.nan)
+            if getalpha:
+                iri_acq_gps = iri.IRI(acqtime, [0, 20000, 20000], glat, glon)
+                alpha = float(iri_acq.TEC / iri_acq_gps.TEC)
+                print('using alpha of ' + str(alpha))
+            alphas.append(alpha)
         elif source == 'code':
             if getalpha:
                 iri_acq_gps = iri.IRI(acqtime, [0, 20000, 20000], glat, glon )
