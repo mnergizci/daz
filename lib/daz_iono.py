@@ -451,7 +451,7 @@ def get_tec(tecmap, lat, lon):
 #    return datetime.utcfromtimestamp(seconds)
 
 def get_f107_table(url='https://spaceweather.gc.ca/solar_flux_data/daily_flux_values/fluxtable.txt'):
-    ftable = pd.read_csv(url, sep='\s+', skiprows=[1])
+    ftable = pd.read_csv(url, sep=r'\s+', skiprows=[1])
     #ftable['fluxdt'] = ftable['fluxjulian'].apply(julian_to_datetime)
     ftable['fluxdatetime'] = pd.to_datetime(
         ftable['fluxdate'].astype(str) + ftable['fluxtime'].astype(str),
