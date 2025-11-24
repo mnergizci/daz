@@ -834,8 +834,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         out_hionos (bool)           whether to output also IRI-estimated peak height of the F2 iono layer (sadly, CODE calculates for 450 km hei which is probably wrong)
         out_tec_master (bool)
         out_tec_all (bool)
-        ionosource (str)            iri or code (for IRI2016 or CODE GIM-based ionosphere. the latter improves RMSE!)
-        use_iri_hei (bool)          if True, it estimates F2 peak altitude using IRI2016 and uses for the correction (with any ionosource). NOTE, CODE data are for 450 km ALT! so better not use_iri_hei..
+        ionosource (str)            iri or code (for IRI or GIM-based ionosphere. the latter improves RMSE!)
+        use_iri_hei (bool)          if True, it estimates F2 peak altitude using IRI and uses for the correction (with any ionosource). NOTE, CODE data are for 450 km ALT..
         alpha (float or 'auto')     only for code (/jpl) source. If 'auto', it would estimate it using IRI model
 
     Notes: 'liang' method should include also some extra F2 height correction..
@@ -844,7 +844,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     if method == 'gomba': # renamed it to keep as it is
         method = 'gradient'
     if ionosource == 'iri' and (not use_iri_hei):
-        print('using IRI2016, setting the iri to estimate F2 peak altitude')
+        print('using IRI, setting the iri to estimate F2 peak altitude')
         use_iri_hei=True
     selected_frame_esds = esds[esds['frame'] == frame].copy()
     frameta = framespd[framespd['frame']==frame]
@@ -895,7 +895,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     Pmid_scene_sat = path.interpolate(0.5).to_geo_point()
     # work in dedicated table
     df = pd.DataFrame(acq_times)
-    # 2024: not clear if IRI2016 F2 peak altitude is correct. Allowing the standard 450 km assumption by CODE (I think TECs will get scaled, so the gradient should be still ok. Not tested)
+    # 2024: not clear if IRI F2 peak altitude is correct. Allowing the standard 450 km assumption by CODE (I think TECs will get scaled, so the gradient should be still ok. Not tested)
     if use_iri_hei or out_hionos:
         # get hionos in that middle point:
         tecs, hionos = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True)

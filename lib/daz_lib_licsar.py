@@ -126,13 +126,14 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
     return a[cols]
 
 
-def get_daz_frame(frame, fulloutput = True, include_corrections = False):
+def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False):
     ''' Function to extract all frame daz values from the LiCSInfo database.
 
     Args:
         frame (str)                 LiCSAR frame ID
         fulloutput (bool)           if True, will return all information from the database (such as cc_rg), otherwise only daz values [mm]
         include_corrections (bool)  if True, will perform also SET and iono corrections and add to the table (or daz if False fulloutput)
+        use_iri_hei (bool)          only with include_corrections - will try scale TEC values with IRI model
     '''
     polyid=lq.get_frame_polyid(frame)[0][0]
     daztb = lq.do_pd_query('select * from esd where polyid={};'.format(polyid))
@@ -141,8 +142,12 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False):
         esds = extract2txt_esds_frame(frame)
         esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
         import daz_iono as di
+        if use_iri_hei:
+            alpha = 'auto'
+        else:
+            alpha = 0.85
         daz_iono, tec_A_master, tec_B_master, tecs_A, tecs_B = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False,
-                                                                                     out_tec_all=True, ionosource='code', use_iri_hei=False)
+                                                                                     out_tec_all=True, ionosource='code', use_iri_hei=use_iri_hei, alpha = alpha)
         daztb['daz_iono'] = daz_iono
         daztb['daz_SET'] = get_SET_for_frame_dazes(frameta, esds)
         if fulloutput:
