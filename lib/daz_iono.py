@@ -875,7 +875,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     # 1. get f2 hei inbetween target center point C and nadir of the satellite satg
     wgs84 = nv.FrameE(name='WGS84')
     Pscene_center = wgs84.GeoPoint(latitude=scene_center_lat, longitude=scene_center_lon, degrees=True)
-    burst_len = 7100*2.758277 #approx. satellite velocity on the ground 7100 [m/s] * burst_interval [s]
+    bovl_acq_dist = 7100*(2.75*2+110*0.002056) #approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap (2*burst_interval [s] + 110 pixels*sampling)
     ###### do the satg_lat, lon
     azimuthDeg = heading-90 #yes, azimuth is w.r.t. N (positive to E)
     elevationDeg = 90-inc_angle_avg
@@ -927,11 +927,11 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
         Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
         # then get A', B'
-        PsatgA, _azimuth = Psatg.displace(distance=burst_len/2, azimuth=heading-180, method='ellipsoid', degrees=True)
-        PsatgB, _azimuth = Psatg.displace(distance=burst_len/2, azimuth= heading, method='ellipsoid', degrees=True)
-        # then do intersection ...
-        PippAt, _azimuth = Pippg.displace(distance=burst_len, azimuth=heading-180, method='ellipsoid', degrees=True)
-        PippBt, _azimuth = Pippg.displace(distance=burst_len, azimuth= heading, method='ellipsoid', degrees=True)
+        PsatgA, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth=heading-180, method='ellipsoid', degrees=True)
+        PsatgB, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth= heading, method='ellipsoid', degrees=True)
+        # then do intersection ... (distance is set just larger here, no meaning for bovl_acq_dist)
+        PippAt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth=heading-180, method='ellipsoid', degrees=True)
+        PippBt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth= heading, method='ellipsoid', degrees=True)
         path_ipp = nv.GeoPath(PippAt, PippBt)
         path_scene_satgA = nv.GeoPath(Pscene_center, PsatgA)
         path_scene_satgB = nv.GeoPath(Pscene_center, PsatgB)
@@ -995,6 +995,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         #i suppose i relate it to burst overlap interval (i.e. 2.7 s /10)
         #burst_ovl_interval = 2.758277/10 #s
         burst_interval = 2.758277
+        # 2025: the bovl interval is actually
+        burst_interval = 5.7 # s
         #kion = phi_ionoramp_burst / burst_ovl_interval # rad/s
         kion = phi_ionoramp_burst / burst_interval # rad/s
         kion_m = phi_ionoramp_burst_m / burst_interval # rad/s
