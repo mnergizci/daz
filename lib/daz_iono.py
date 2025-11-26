@@ -903,10 +903,13 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         selected_frame_esds['hiono'] = hionos[:-1]  ###*1000 # convert to metres, avoid last measure, as this is 'master'
         df['hiono'] = hionos
     else:
-        df['hiono'] = 450 # standard altitude used by CODE
+        #df['hiono'] = 450 # standard altitude used by CODE
+        hiono = 290  # more correct estimate
+        df['hiono'] = hiono
         hionos = list(df.hiono.values)
-        hiono_master = 450
-        selected_frame_esds['hiono'] = 450
+        #hiono_master = 450
+        hiono_master = hiono
+        selected_frame_esds['hiono'] = hiono
         #
     ############## now calculate TEC using the SLM knowledge, i.e. different A,B per epoch (!)
     # (note that the last hiono is for the master/reference epoch
