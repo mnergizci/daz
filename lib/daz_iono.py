@@ -131,6 +131,7 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
     alphas = []
     if source == 'jpliri':
         ftable = get_f107_table()
+        print('this was an experiment but seems not worth further works')
     for acqtime in acq_times:
         if source == 'iri':
             iri_acq = iri.IRI(acqtime, altkmrange, glat, glon )
@@ -823,7 +824,7 @@ def get_abs_iono_corr(frame,esds,framespd):
 '''
 
 def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = False, out_tec_master = False,
-                       out_tec_all = False, ionosource='iri', use_iri_hei=False, alpha = 0.85):
+                       out_tec_all = False, ionosource='code', use_iri_hei=False, alpha = 0.85):
     ''' Function to calculate iono correction for a given frame.
 
     Args:
@@ -875,7 +876,9 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     # 1. get f2 hei inbetween target center point C and nadir of the satellite satg
     wgs84 = nv.FrameE(name='WGS84')
     Pscene_center = wgs84.GeoPoint(latitude=scene_center_lat, longitude=scene_center_lon, degrees=True)
-    bovl_acq_dist = 7100*(2.75*2+110*0.002056) #approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap (2*burst_interval [s] + 110 pixels*sampling)
+    # bovl_acq_dist = 7100*(2.75*2+110*0.002056) #approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap
+    bovl_acq_dist = 7100 * (2.75/3*2 + 0.07)  # approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap
+    # ok... we should not use PRF to calculate the time --- rather we use ratio of 110 lines of burst overlap vs 1450 lines burstwise...
     ###### do the satg_lat, lon
     azimuthDeg = heading-90 #yes, azimuth is w.r.t. N (positive to E)
     elevationDeg = 90-inc_angle_avg
