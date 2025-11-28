@@ -139,6 +139,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
     daztb = lq.do_pd_query('select * from esd where polyid={};'.format(polyid))
     if include_corrections:
         frameta = get_frameta(frame)
+        mastr = str(pd.to_datetime(frameta.master[0]).date())
         esds = extract2txt_esds_frame(frame)
         esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
         import daz_iono as di
@@ -175,13 +176,26 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                 n = float(n.where(n != 0).median())
                 u = float(u.where(u != 0).median())
                 drg_tides_mm = []
+                gcs_mm = []
                 for edt in esds.epochdate.values:
                     epochdtstr = str(edt) + 'T' + centre_time
                     E, N, U = get_SET_coords(lon, lat, epochdtstr)
                     drg_tide_m = E*e + N*n + U*u
-                    drg_tides_mm.append(1000*drg_tide_m)
+                    drg_tides_mm.append(1000*drg_tide_m*(-1))
+                    # gcs = get_gacos_in_coord(lon,lat,str(edt).replace('-',''), frame, inmm=True)
+                    gcs = get_gacos_in_coord(lon, lat, str(edt).replace('-',''), frame, inmm=True, domean=True) # mean is slower but... better here(?)
+                    gcs_mm.append(gcs*(-1))
                 drg_tides_mm = np.array(drg_tides_mm)
+                gcs_mm = np.array(gcs_mm)
                 daztb['drg_SET_mm'] = drg_tides_mm
+                daztb['drg_GACOS_mm'] = gcs_mm
+                try:
+                    mastr_SET = daztb[daztb['epoch']==mastr]['drg_SET_mm'].values[0]
+                    mastr_GACOS = daztb[daztb['epoch'] == mastr]['drg_GACOS_mm'].values[0]
+                    daztb['drg_SET_mm'] = daztb['drg_SET_mm'] - mastr_SET
+                    daztb['drg_GACOS_mm'] = daztb['drg_GACOS_mm'] - mastr_GACOS
+                except:
+                    print('correction wrt reference epoch did not succeed - expect overall offset')
             except:
                 print('some issue getting range SET corrections..')
     if fulloutput:
@@ -532,7 +546,7 @@ def get_dfDC(path_to_slcdir, f0=5405000500, burst_interval = 2.758277, returnka 
     #burst_interval = get_param_gamma('burst_interval', topsparfile)
     epoch = os.path.basename(path_to_slcdir)
     frame = path_to_slcdir.split('/')[-3]
-    parfile = os.path.join(path_to_slcdir, epoch+'.slc.par')
+    # parfile = os.path.join(path_to_slcdir, epoch+'.slc.par')
     #parfile = glob.glob(path_to_slcdir+'/????????.slc.par')[0]
     #topsparfiles = glob.glob(path_to_slcdir+'/????????.IW?.slc.TOPS_par')
     #iwparfiles = glob.glob(path_to_slcdir+'/????????.IW?.slc.par')
@@ -1026,6 +1040,26 @@ def get_azshift_lt(ltfile = '20210425.mli.lt', offile = '20210413_20210425.off.s
         m = m[m != 0]
         rgshift = rg_ml * (np.mean(m) - midline)
         return azshift, rgshift
+
+
+def get_gacos_in_coord(lon,lat,epochstr, frame, inmm=True, domean=True):
+    #import rioxarray
+    epochpath = os.path.join(os.environ['LiCSAR_public'], str(int(frame[:3])), frame, 'epochs', epochstr)
+    gacospath = os.path.join(epochpath, epochstr+'.sltd.geo.tif')
+    if not os.path.exists(gacospath):
+        return np.nan
+    else:
+        try:
+            f = rioxarray.open_rasterio(gacospath)
+            if domean:
+                out=float(f[0].mean())
+            else:
+                out = float(f[0].sel(x=lon, y=lat, method='nearest').values)
+        except:
+            return np.nan
+        if inmm:
+            out = rad2mm_s1(out)
+        return out
 
 
 def get_table_azishifts(frame):

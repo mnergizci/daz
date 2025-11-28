@@ -941,6 +941,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         # these two points are the ones where we should get TEC
         PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
         PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
+        pdist, pa1, pa2 = PippA.distance_and_azimuth(PippB, degrees=True)
+        print('debug: distance between the IPP points is '+str(int(pdist))+' m and their azimuth'+str(int(pa1))+' deg')
         ######### get TECS for A, B
         TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
         TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
