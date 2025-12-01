@@ -103,7 +103,7 @@ def extract_iono_full(esds, framespd, ionosource = 'iri', use_iri_hei=True):
 # step 3 - get daz iono
 ################### IONOSPHERE 
 
-def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', alpha = 0.85, returnalpha = False):
+def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', alpha = 0.85, returnalpha = False, tecxr = None):
     '''Gets estimated TEC over given point, up to given altitude
     
     Args:
@@ -113,6 +113,7 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
         source (str): source of TEC - either 'iri' for IRI2016 model (must be installed), 'code' to autodownload from CODE GIM, 'jpl' to use JPL HRES GIM (would fallback to CODE), or 'jpliri' to drive the JPL GIM using IRI2020
         alpha (float): for CODE only, estimate of ratio of TEC towards 'to the satellite only'. If 'auto', it will estimate it using iri. 0.85 is good value
         returnalpha (bool): if True, will also return alpha param (useful with alpha = 'auto')
+        tecxr (None or xr.Dataset): only for GIM source. if provided (as get_vtec_from_code), it would use this rather than re-generate (to save some time)
     '''
     if source == 'jpl':
         source = 'code'  # TODO.. for now, both CODE and JPL will try JPL first..
@@ -150,7 +151,10 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
                 print('using alpha of '+str(alpha))
             alphas.append(alpha)
             try:
-                tec = get_vtec_from_code(acqtime, glat, glon)
+                if type(tecxr) != type(None):
+                    tec = get_vtec_from_tecxr(tecxr, acqtime, glat, glon, method='linear')
+                else:
+                    tec = get_vtec_from_code(acqtime, glat, glon)
             except:
                 # CODE data is not available earlier than with 6 months delay.. or more?
                 tec = np.nan
@@ -342,6 +346,13 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         tecxr.where(tecxr!=tonan)
         tecxr=tecxr.interpolate_na(dim="lon", method="linear", fill_value="extrapolate")
         tecxr = tecxr*1e+16 # from TECU
+    if acqtime<tecxr.time.min():
+        # need to join day before:
+        tecxr2=get_vtec_from_code(acqtime-pd.Timedelta('1 day'), lat=lat, lon=lon, return_fullxr = True)
+        tecxr = xr.concat([tecxr2, tecxr], dim='time')
+    if acqtime>tecxr.time.max():
+        tecxr2=get_vtec_from_code(acqtime+pd.Timedelta('1 day'), lat=lat, lon=lon, return_fullxr = True)
+        tecxr = xr.concat([tecxr, tecxr2], dim='time')
     if return_fullxr:
         return tecxr
     else:
@@ -842,6 +853,9 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     Notes: 'liang' method should include also some extra F2 height correction..
     2023/08: Liang method was first implemented here and a lot happened since that time.. Please consider it obsolete.
     '''
+    # some constants
+    earth_radius = 6378160 # m
+    #
     if method == 'gomba': # renamed it to keep as it is
         method = 'gradient'
     if ionosource == 'iri' and (not use_iri_hei):
@@ -877,7 +891,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     wgs84 = nv.FrameE(name='WGS84')
     Pscene_center = wgs84.GeoPoint(latitude=scene_center_lat, longitude=scene_center_lon, degrees=True)
     # bovl_acq_dist = 7100*(2.75*2+110*0.002056) #approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap
-    bovl_acq_dist = 7100 * (2.75/3*2 + 0.07)  # approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap
+    bovl_dtime = 2.75/3*2 + 0.07
+    bovl_acq_dist = 7100 * bovl_dtime  # approx. satellite velocity on the ground 7100 [m/s] * time to acquire burst overlap
     # ok... we should not use PRF to calculate the time --- rather we use ratio of 110 lines of burst overlap vs 1450 lines burstwise...
     ###### do the satg_lat, lon
     azimuthDeg = heading-90 #yes, azimuth is w.r.t. N (positive to E)
@@ -892,15 +907,17 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     x, y, z = aer2ecef(azimuthDeg, elevationDeg, slantRange, scene_center_lat, scene_center_lon, 0) #scene_alt)
     satg_lat, satg_lon, sat_alt = ecef2latlonhei(x, y, z)
     Psatg = wgs84.GeoPoint(latitude=satg_lat, longitude=satg_lon, degrees=True)
-    # get middle point between scene and sat - and get F2 height for it
+    # get middle point between scene and sat - and get F2 altitude (max TEC) for it
     path = nv.GeoPath(Pscene_center.to_nvector(), Psatg.to_nvector())
     # get point in the middle
     Pmid_scene_sat = path.interpolate(0.5).to_geo_point()
     # work in dedicated table
     df = pd.DataFrame(acq_times)
     # 2024: not clear if IRI F2 peak altitude is correct. Allowing the standard 450 km assumption by CODE (I think TECs will get scaled, so the gradient should be still ok. Not tested)
+    # 2025: tested. IRI is more correct. especially IRI2020
     if use_iri_hei or out_hionos:
         # get hionos in that middle point:
+        print('extracting hmF2 estimates from IRI model')
         tecs, hionos = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True)
         hiono_master = hionos[-1]
         selected_frame_esds['hiono'] = hionos[:-1]  ###*1000 # convert to metres, avoid last measure, as this is 'master'
@@ -918,52 +935,106 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     # (note that the last hiono is for the master/reference epoch
     tecs_A = []
     tecs_B = []
-    #for hiono in hionos:
+    # do per epoch, using frame metadata (valid for reference epoch dt...)
+    if 'swath_dfDC' in frameta:
+        print('estimating iono gradients per swath')
+        slantRange = np.array(frameta['swath_centre_range_m'].values[0])
+        heading = np.array(frameta['swath_heading'].values[0])  # note: this is satellite heading, not scene heading (about 3 deg diff)
+        azimuthDeg = heading - 90 #yes, azimuth is w.r.t. N (positive to E)
+        theta = np.radians(np.array(frameta['swath_avg_incidence_angle'].values[0]))
+        elevationDeg = 90-np.array(frameta['swath_avg_incidence_angle'].values[0])
+        scene_center_lat = np.array(frameta['swath_center_lat'].values[0])
+        scene_center_lon = np.array(frameta['swath_center_lat'].values[0])
+        dfDC = np.array(frameta['swath_dfDC'].values[0])
+        ka = np.array(frameta['swath_ka'].values[0])
+        perswath=True
+        method='gradient'
+    else:
+        perswath=False
     for i,a in df.iterrows():
         hiono = float(a['hiono']*1000) # m
         epochdate = a['epochdate']
+        #alpha_to_use = alpha
         print('running for epochtime: '+str(epochdate))
         print('assuming peak iono alt of : '+str(int(hiono/1000))+' km')
-        # first, get IPP - ionosphere pierce point
-        # range to IPP can be calculated using:
-        # range_IPP = hiono/np.sin(theta)
-        # but maybe not... let's do it simpler:
-        range_IPP = slantRange * hiono / sat_alt
-        x, y, z = aer2ecef(azimuthDeg, elevationDeg, range_IPP, scene_center_lat, scene_center_lon, 0) #scene_alt)
-        ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
-        Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
-        # then get A', B'
-        PsatgA, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth=heading-180, method='ellipsoid', degrees=True)
-        PsatgB, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth= heading, method='ellipsoid', degrees=True)
-        # then do intersection ... (distance is set just larger here, no meaning for bovl_acq_dist)
-        PippAt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth=heading-180, method='ellipsoid', degrees=True)
-        PippBt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth= heading, method='ellipsoid', degrees=True)
-        path_ipp = nv.GeoPath(PippAt, PippBt)
-        path_scene_satgA = nv.GeoPath(Pscene_center, PsatgA)
-        path_scene_satgB = nv.GeoPath(Pscene_center, PsatgB)
-        # these two points are the ones where we should get TEC
-        PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
-        PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
-        pdist, pa1, pa2 = PippA.distance_and_azimuth(PippB, degrees=True)
-        print('debug: distance between the IPP points is '+str(int(pdist))+' m and their azimuth'+str(int(pa1))+' deg')
-        ######### get TECS for A, B
-        TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
-        TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
-        # get inc angle at IPP - see iono. single layer model function
-        earth_radius = 6378160 # m
-        sin_thetaiono = earth_radius/(earth_radius+hiono) * np.sin(theta)
-        TECS_A = TECV_A/np.sqrt(1-sin_thetaiono**2)
-        TECS_B = TECV_B/np.sqrt(1-sin_thetaiono**2)
-        tecs_A.append(TECS_A)
-        tecs_B.append(TECS_B)
+        if perswath:
+            if ionosource == 'code':
+                print('getting GIM VTEC')
+                tecxr=get_vtec_from_code(epochdate, lat=0, lon=0, return_fullxr = True)
+            range_IPP = slantRange * hiono / sat_alt
+            sin_thetaiono = earth_radius/(earth_radius+hiono) * np.sin(theta)
+            tecs_A_swaths = np.array([], dtype=np.float32)
+            tecs_B_swaths = np.array([], dtype=np.float32)
+            for j in range(len(range_IPP)):
+                x, y, z = aer2ecef(azimuthDeg[j], elevationDeg[j], range_IPP[j], scene_center_lat[j], scene_center_lon[j], 0) #scene_alt)
+                ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
+                Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
+                # then get A', B'
+                # note, bovl_acq_dist would slightly vary per swath...
+                PsatgA, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth=heading[j]-180, method='ellipsoid', degrees=True)
+                PsatgB, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth= heading[j], method='ellipsoid', degrees=True)
+                # then do intersection ... (distance is set just larger here, no meaning for bovl_acq_dist)
+                PippAt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth=heading[j]-180, method='ellipsoid', degrees=True)
+                PippBt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth= heading[j], method='ellipsoid', degrees=True)
+                path_ipp = nv.GeoPath(PippAt, PippBt)
+                path_scene_satgA = nv.GeoPath(Pscene_center, PsatgA)
+                path_scene_satgB = nv.GeoPath(Pscene_center, PsatgB)
+                # these two points are the ones where we should get TEC
+                PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
+                PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
+                if ionosource != 'code':
+                    TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+                    TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+                else:
+                    TECV_A = get_vtec_from_tecxr(tecxr, epochdate-pd.Timedelta(bovl_dtime/2, 's'), PippA.latitude_deg, PippA.longitude_deg, method='linear')
+                    TECV_B = get_vtec_from_tecxr(tecxr, epochdate+pd.Timedelta(bovl_dtime/2, 's'), PippB.latitude_deg, PippB.longitude_deg, method='linear')
+                TECS_A = TECV_A/np.sqrt(1-sin_thetaiono[j]**2)
+                TECS_B = TECV_B/np.sqrt(1-sin_thetaiono[j]**2)
+                tecs_A_swaths = np.append(tecs_A_swaths, TECS_A)
+                tecs_B_swaths = np.append(tecs_B_swaths, TECS_B)
+            tecs_A.append(tecs_A_swaths) #.mean())
+            tecs_B.append(tecs_B_swaths) #.mean())
+            
+        else:
+            # first, get IPP - ionosphere pierce point
+            # range to IPP can be calculated using:
+            # range_IPP = hiono/np.sin(theta)
+            # but maybe not... let's do it simpler:
+            range_IPP = slantRange * hiono / sat_alt
+            x, y, z = aer2ecef(azimuthDeg, elevationDeg, range_IPP, scene_center_lat, scene_center_lon, 0) #scene_alt)
+            ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
+            Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
+            # then get A', B'
+            PsatgA, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth=heading-180, method='ellipsoid', degrees=True)
+            PsatgB, _azimuth = Psatg.displace(distance=bovl_acq_dist/2, azimuth= heading, method='ellipsoid', degrees=True)
+            # then do intersection ... (distance is set just larger here, no meaning for bovl_acq_dist)
+            PippAt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth=heading-180, method='ellipsoid', degrees=True)
+            PippBt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth= heading, method='ellipsoid', degrees=True)
+            path_ipp = nv.GeoPath(PippAt, PippBt)
+            path_scene_satgA = nv.GeoPath(Pscene_center, PsatgA)
+            path_scene_satgB = nv.GeoPath(Pscene_center, PsatgB)
+            # these two points are the ones where we should get TEC
+            PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
+            PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
+            pdist, pa1, pa2 = PippA.distance_and_azimuth(PippB, degrees=True)
+            print('debug: distance between the IPP points is '+str(int(pdist))+' m and their azimuth '+str(int(pa1))+' deg')
+            ######### get TECS for A, B
+            TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+            TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+            # get inc angle at IPP - see iono. single layer model function
+            sin_thetaiono = earth_radius/(earth_radius+hiono) * np.sin(theta)
+            TECS_A = TECV_A/np.sqrt(1-sin_thetaiono**2)
+            TECS_B = TECV_B/np.sqrt(1-sin_thetaiono**2)
+            tecs_A.append(TECS_A)
+            tecs_B.append(TECS_B)
     #
     tec_A_master = tecs_A[-1]
     tec_B_master = tecs_B[-1]
     tecs_A = tecs_A[:-1]
     tecs_B = tecs_B[:-1]
     #
-    selected_frame_esds['TECS_A'] = tecs_A
-    selected_frame_esds['TECS_B'] = tecs_B
+    #selected_frame_esds['TECS_A'] = tecs_A
+    #selected_frame_esds['TECS_B'] = tecs_B
     #
     ##############################
     #if method == 'gomba':
@@ -975,46 +1046,80 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     fL = f0 - dfDC*0.5
     #tecovl = (TECs_B1 - TEC_master_B1)/(fH*fH) - (TECs_B2 - TEC_master_B2)/(fL*fL)
     #daz_iono = -2*PRF*k*f0/c/dfDC * tecovl
-    if method == 'gradient':
-        # 08/2021 - empirically checked, correct:
-        #tecovl = (selected_frame_esds['TECS_B'] - tec_B_master)/(fL*fL) - (selected_frame_esds['TECS_A'] - tec_A_master)/(fH*fH)
-        #daz_iono = 2*PRF*k*f0/c/dfDC * tecovl
-        # 04/2022 - actually the squares seem not needed, based directly on iono2phase (see article):
-        # note it is 'master' minus 'epoch S', since i start from ifg as M * complex conjugate of S (so basically phase M - phase S, phase is negative for higher delay)
-        # 2023 - oh well, it was best to do straightforward equations, see Lazecky et al., 2023, GRL
-        tecovl = (tec_A_master - selected_frame_esds['TECS_A'])/fH - (tec_B_master - selected_frame_esds['TECS_B'])/fL
-        daz_iono = 2*PRF*k/c/dfDC * tecovl
-    else:
-        # following the Liang 2019:
-        # needs ka...
-        hsat =  sat_alt
-        ka = frameta['ka'].values[0]
-        #print('setting Hiono={} km, but it would be close to Gomba method as around 700 km'.format(hiono_m))
-        # kion should be rad/s
-        # this would get iono effect within the full burst spectrum (from fH to fL)
-        phaionL = -4*np.pi*k/c/fL * selected_frame_esds['TECS_B']  # - TEC_master_B1)
-        phaionH = -4*np.pi*k/c/fH * selected_frame_esds['TECS_A']  # - TEC_master_B2)
-        phaionL_m = -4*np.pi*k/c/fL * tec_B_master
-        phaionH_m = -4*np.pi*k/c/fH * tec_A_master
+    
+    if perswath:
+        nobursts = frame.split('_')[2]
+        nobursts = [int(nobursts[:2]), int(nobursts[2:4]), int(nobursts[4:6])]
+        while 0 in nobursts:
+            nobursts.remove(0)
+        nobursts = np.array(nobursts)
+        nobovls = nobursts-1
+        tecs_A2tb = []
+        tecs_B2tb = []
+        for t in tecs_A:
+            tecs_A2tb.append(t.mean())
+        for t in tecs_B:
+            tecs_B2tb.append(t.mean())
+        selected_frame_esds['TECS_A'] = tecs_A2tb
+        selected_frame_esds['TECS_B'] = tecs_B2tb
+        selected_frame_esds['daz_iono'] = 0.0
+        daz_iono = []
         #
-        #phi_ionoramp_burst = fL*fH/(f0*(fH*fH - fL*fL)) * (dphaionL*fH - dphaionH*fL)
-        phi_ionoramp_burst = phaionH - phaionL
-        phi_ionoramp_burst_m = phaionH_m - phaionL_m
-        #i suppose i relate it to burst overlap interval (i.e. 2.7 s /10)
-        #burst_ovl_interval = 2.758277/10 #s
-        burst_interval = 2.758277
-        # 2025: the bovl interval is actually
-        burst_interval = 5.7 # s
-        #kion = phi_ionoramp_burst / burst_ovl_interval # rad/s
-        kion = phi_ionoramp_burst / burst_interval # rad/s
-        kion_m = phi_ionoramp_burst_m / burst_interval # rad/s
-        nesd_iono = -(1/(2*np.pi)) * kion/ka * ((selected_frame_esds['hiono'])/hsat + 0.5) # only for one acq!!!
-        nesd_iono_master = -(1/(2*np.pi)) * kion_m/ka * ((hiono_master)/hsat + 0.5) # only for one acq!!!
-        # in seconds, need to convert to pixels
-        #phiesd = nesd_iono * 2 * np.pi * dfDC
-        #daz_iono = PRF * phiesd / (2*np.pi*dfDC)
-        daz_iono = PRF * (nesd_iono - nesd_iono_master) # / (2*np.pi*dfDC)
-        #return daz_iono
+        for tecind in range(len(tecs_A)):
+            tecs_A_ep = tecs_A[tecind]
+            tecs_B_ep = tecs_B[tecind]
+            daz_iono_ep = []
+            for j in range(len(tec_A_master)):
+                tecovl = (tec_A_master[j] - tecs_A_ep[j])/fH[j] - (tec_B_master[j] - tecs_B_ep[j])/fL[j]
+                daz_iono_sw = 2*PRF*k/c/dfDC[j] * tecovl
+                daz_iono_ep.append(daz_iono_sw*nobovls[j])
+            # now get it as avg for no of bovls:
+            daz_iono.append(np.array(daz_iono_ep).sum()/nobovls.sum())
+        selected_frame_esds['daz_iono'] = np.array(daz_iono)
+        daz_iono = selected_frame_esds['daz_iono']
+    else:
+        selected_frame_esds['TECS_A'] = tecs_A
+        selected_frame_esds['TECS_B'] = tecs_B
+        if method == 'gradient':
+            # 08/2021 - empirically checked, correct:
+            #tecovl = (selected_frame_esds['TECS_B'] - tec_B_master)/(fL*fL) - (selected_frame_esds['TECS_A'] - tec_A_master)/(fH*fH)
+            #daz_iono = 2*PRF*k*f0/c/dfDC * tecovl
+            # 04/2022 - actually the squares seem not needed, based directly on iono2phase (see article):
+            # note it is 'master' minus 'epoch S', since i start from ifg as M * complex conjugate of S (so basically phase M - phase S, phase is negative for higher delay)
+            # 2023 - oh well, it was best to do straightforward equations, see Lazecky et al., 2023, GRL
+            tecovl = (tec_A_master - selected_frame_esds['TECS_A'])/fH - (tec_B_master - selected_frame_esds['TECS_B'])/fL
+            daz_iono = 2*PRF*k/c/dfDC * tecovl
+        else:
+            # following the Liang 2019:
+            # needs ka...
+            hsat =  sat_alt
+            ka = frameta['ka'].values[0]
+            #print('setting Hiono={} km, but it would be close to Gomba method as around 700 km'.format(hiono_m))
+            # kion should be rad/s
+            # this would get iono effect within the full burst spectrum (from fH to fL)
+            phaionL = -4*np.pi*k/c/fL * selected_frame_esds['TECS_B']  # - TEC_master_B1)
+            phaionH = -4*np.pi*k/c/fH * selected_frame_esds['TECS_A']  # - TEC_master_B2)
+            phaionL_m = -4*np.pi*k/c/fL * tec_B_master
+            phaionH_m = -4*np.pi*k/c/fH * tec_A_master
+            #
+            #phi_ionoramp_burst = fL*fH/(f0*(fH*fH - fL*fL)) * (dphaionL*fH - dphaionH*fL)
+            phi_ionoramp_burst = phaionH - phaionL
+            phi_ionoramp_burst_m = phaionH_m - phaionL_m
+            #i suppose i relate it to burst overlap interval (i.e. 2.7 s /10)
+            #burst_ovl_interval = 2.758277/10 #s
+            burst_interval = 2.758277
+            # 2025: the bovl interval is actually
+            burst_interval = 5.7 # s
+            #kion = phi_ionoramp_burst / burst_ovl_interval # rad/s
+            kion = phi_ionoramp_burst / burst_interval # rad/s
+            kion_m = phi_ionoramp_burst_m / burst_interval # rad/s
+            nesd_iono = -(1/(2*np.pi)) * kion/ka * ((selected_frame_esds['hiono'])/hsat + 0.5) # only for one acq!!!
+            nesd_iono_master = -(1/(2*np.pi)) * kion_m/ka * ((hiono_master)/hsat + 0.5) # only for one acq!!!
+            # in seconds, need to convert to pixels
+            #phiesd = nesd_iono * 2 * np.pi * dfDC
+            #daz_iono = PRF * phiesd / (2*np.pi*dfDC)
+            daz_iono = PRF * (nesd_iono - nesd_iono_master) # / (2*np.pi*dfDC)
+            #return daz_iono
     if out_hionos:
         if out_tec_master:
             return daz_iono, hionos, tec_A_master, tec_B_master

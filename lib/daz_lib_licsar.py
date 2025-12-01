@@ -112,7 +112,8 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
     or with epochtime as well, if this was set by fix_epoch_time (takes long...)
     '''
     a = get_daz_frame(frame)
-    a['epoch']=a.epoch.apply(lambda x: x.strftime('%Y%m%d'))
+    if 'epoch' in a:
+        a['epoch']=a.epoch.apply(lambda x: x.strftime('%Y%m%d'))
     a['esd_master']=a.rslc3.apply(lambda x: x.strftime('%Y%m%d'))
     a['daz_total_wrt_orbits']=a.daz  #+a.cc_azi daz is the final value (ICC+SD)
     a['orbits_precision'] = 'P'  # only Ps should be in database
@@ -207,8 +208,11 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
             daz_mm.values = daz_mm.values - daztb['daz_iono'].values * 14000 - daztb['daz_SET'].values * 14000
             return daz_mm
     else:
-        daz_mm = daztb.set_index('epoch')['daz'] * 14000
-        return daz_mm
+        if fulloutput:
+            return daztb
+        else:
+            daz_mm = daztb.set_index('epoch')['daz'] * 14000
+            return daz_mm
 
 
 
@@ -367,6 +371,7 @@ def get_frameta(frame, perswath=False):
         dfDC, ka = get_dfDC(path_to_slcdir, returnperswath = perswath)
         a['swath_ka'] = [ka]
         a['swath_dfDC'] = [dfDC]
+        dfDC, ka = get_dfDC(path_to_slcdir) # this is to keep per-frame values..
     except:
         print('some error occurred during extracting dfDC per swath - cancelling per swath option')
         perswath = False
