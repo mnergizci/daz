@@ -1077,6 +1077,14 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             daz_iono.append(np.array(daz_iono_ep).sum()/nobovls.sum())
         selected_frame_esds['daz_iono'] = np.array(daz_iono)
         daz_iono = selected_frame_esds['daz_iono']
+        # return mean values for later use
+        #tec_A_master = np.mean(tec_A_master)
+        #tec_B_master = np.mean(tec_B_master)
+        # np.array(tecs_A).mean(axis=1)
+        tec_A_master = (tec_A_master*nobovls).sum()/nobovls.sum()
+        tec_B_master = (tec_B_master*nobovls).sum()/nobovls.sum()
+        tecs_A = (tecs_A*nobovls).sum(axis=1)/nobovls.sum()
+        tecs_B = (tecs_B*nobovls).sum(axis=1)/nobovls.sum()
     else:
         selected_frame_esds['TECS_A'] = tecs_A
         selected_frame_esds['TECS_B'] = tecs_B
