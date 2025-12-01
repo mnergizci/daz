@@ -854,9 +854,9 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     scene_center_lon = frameta['center_lon'].values[0]
     scene_center_lat = frameta['center_lat'].values[0]
     # resolution_of_pixel = frameta['azimuth_resolution'].values[0]
-    try:
+    if 'centre_range_ok_m' in frameta:
         range_avg = frameta['centre_range_ok_m'].values[0] # 2024: GAMMA had a bug wrongly informing on centre_range (may differ by 20 km or so!). fixed most of it
-    except:
+    else:
         range_avg = frameta['centre_range_m'].values[0]
     master = frameta['master'].values[0]
     inc_angle_avg = frameta['avg_incidence_angle'].values[0]

@@ -126,7 +126,7 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
     return a[cols]
 
 
-def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False):
+def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False, corr_per_swath = True):
     ''' Function to extract all frame daz values from the LiCSInfo database.
 
     Args:
@@ -134,11 +134,12 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
         fulloutput (bool)           if True, will return all information from the database (such as cc_rg), otherwise only daz values [mm]
         include_corrections (bool)  if True, will perform also SET and iono corrections and add to the table (or daz if False fulloutput)
         use_iri_hei (bool)          only with include_corrections - will try scale TEC values with IRI model
+        corr_per_swath (bool)       will bit improve corrections using center region per swath rather than from frame center
     '''
     polyid=lq.get_frame_polyid(frame)[0][0]
     daztb = lq.do_pd_query('select * from esd where polyid={};'.format(polyid))
     if include_corrections:
-        frameta = get_frameta(frame)
+        frameta = get_frameta(frame, perswath=corr_per_swath)
         mastr = str(pd.to_datetime(frameta.master[0]).date())
         esds = extract2txt_esds_frame(frame)
         esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
@@ -150,6 +151,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
         daz_iono, tec_A_master, tec_B_master, tecs_A, tecs_B = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False,
                                                                                      out_tec_all=True, ionosource='code', use_iri_hei=use_iri_hei, alpha = alpha)
         daztb['daz_iono'] = daz_iono
+        # SET will still work frame-centered only (need this to change??)
         daztb['daz_SET'] = get_SET_for_frame_dazes(frameta, esds)
         if fulloutput:
             import rioxarray
@@ -172,9 +174,9 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                 e = rioxarray.open_rasterio(e).squeeze('band').drop('band')
                 n = rioxarray.open_rasterio(n).squeeze('band').drop('band')
                 u = rioxarray.open_rasterio(u).squeeze('band').drop('band')
-                e = float(e.where(e != 0).median())
-                n = float(n.where(n != 0).median())
-                u = float(u.where(u != 0).median())
+                e = float(e.where(e != 0).mean())
+                n = float(n.where(n != 0).mean())
+                u = float(u.where(u != 0).mean())
                 drg_tides_mm = []
                 gcs_mm = []
                 for edt in esds.epochdate.values:
@@ -198,12 +200,14 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                     print('correction wrt reference epoch did not succeed - expect overall offset')
             except:
                 print('some issue getting range SET corrections..')
-    if fulloutput:
-        return daztb
+            return daztb
+        else:
+            # if we want to return only corrected daz_mm
+            daz_mm = daztb.set_index('epoch')['daz'] * 14000
+            daz_mm.values = daz_mm.values - daztb['daz_iono'].values * 14000 - daztb['daz_SET'].values * 14000
+            return daz_mm
     else:
         daz_mm = daztb.set_index('epoch')['daz'] * 14000
-        if include_corrections:
-            daz_mm.values = daz_mm.values - daztb['daz_iono'].values * 14000 - daztb['daz_SET'].values * 14000
         return daz_mm
 
 
@@ -350,7 +354,7 @@ def extract_frame_master_s1abs(framespd):
     return framespd
 
 
-def get_frameta(frame):
+def get_frameta(frame, perswath=False):
     a = pd.DataFrame()
     tr = int(frame[:3])
     metafile = os.path.join(os.environ['LiCSAR_public'], str(tr), frame, 'metadata', 'metadata.txt')
@@ -359,6 +363,52 @@ def get_frameta(frame):
         return False
     primepoch = grep1line('master=', metafile).split('=')[1]
     path_to_slcdir = os.path.join(os.environ['LiCSAR_procdir'], str(tr), frame, 'SLC', primepoch)
+    try:
+        dfDC, ka = get_dfDC(path_to_slcdir, returnperswath = perswath)
+        a['swath_ka'] = [ka]
+        a['swath_dfDC'] = [dfDC]
+    except:
+        print('some error occurred during extracting dfDC per swath - cancelling per swath option')
+        perswath = False
+        try:
+            dfDC, ka = get_dfDC(path_to_slcdir)
+        except:
+            print('some error occurred getting average dfDC for frame ' + frame+' - setting default dfDC and ka')
+            dfDC = 4365
+            ka = -2000
+    a['frame'] = [frame]
+    a['master'] = [primepoch]
+    a['ka'] = [ka]
+    a['dfDC'] = [dfDC]
+    if perswath:
+        parfiles = glob.glob(os.path.join(path_to_slcdir,primepoch)+'.IW?.slc.par')
+        heading = []
+        azimuth_resolution = []
+        avg_incidence_angle = []
+        centre_range_m = []
+        centre_time = []
+        lon = []
+        lat = []
+        for par in parfiles:
+            heading.append(get_param_gamma('heading',par))
+            azimuth_resolution.append(get_param_gamma('azimuth_pixel_spacing',par))
+            avg_incidence_angle.append(get_param_gamma('incidence_angle',par))
+            # old GAMMA had issue with centre_range - just to be sure, averaging from near and far range
+            nearrange = get_param_gamma('near_range_slc',par)
+            farrange = get_param_gamma('far_range_slc',par)
+            centre_range_m.append((nearrange+farrange)/2)
+            cdate = grep1line('date', par).split()[4:]
+            cdate = cdate[0]+':'+cdate[1]+':'+cdate[2]
+            centre_time.append(cdate)
+            lon.append(get_param_gamma('center_longitude',par))
+            lat.append(get_param_gamma('center_latitude',par))
+        a['swath_heading'] = [heading]
+        a['swath_azimuth_resolution'] = [azimuth_resolution]
+        a['swath_avg_incidence_angle'] = [avg_incidence_angle]
+        a['swath_centre_range_m'] = [centre_range_m]
+        a['swath_centre_time'] = [centre_time]
+        a['swath_center_lon'] = [lon]
+        a['swath_center_lat'] = [lat]
     heading = float(grep1line('heading', metafile).split('=')[1])
     azimuth_resolution = float(grep1line('azimuth_resolution', metafile).split('=')[1])
     avg_incidence_angle = float(grep1line('avg_incidence_angle', metafile).split('=')[1])
@@ -367,33 +417,23 @@ def get_frameta(frame):
     except:
         centre_range_m = float(grep1line('centre_range_m', metafile).split('=')[1])
     centre_time = grep1line('center_time', metafile).split('=')[1]
-    try:
-        dfDC, ka = get_dfDC(path_to_slcdir)
-    except:
-        print('some error occurred during frame ' + frame)
-        dfDC = 0
-        ka = 0
-    try:
-        hei = grep1line('avg_height', metafile).split('=')[1]
-    except:
-        print('no height information, returning 0 for frame ' + frame)
-        hei = 0
-    a['frame'] = [frame]
-    a['master'] = [primepoch]
+    framegeom = fc.get_frames_gpd([frame])
+    c = framegeom.geometry.centroid
+    lon = c[0].coords[0][0]
+    lat = c[0].coords[0][1]
     a['heading'] = [heading]
     a['azimuth_resolution'] = [azimuth_resolution]
     a['avg_incidence_angle'] = [avg_incidence_angle]
     a['centre_range_m'] = [centre_range_m]
     a['centre_time'] = [centre_time]
-    a['ka'] = [ka]
-    a['dfDC'] = [dfDC]
-    a['avg_height'] = [hei]
-    framegeom = fc.get_frames_gpd([frame])
-    c = framegeom.geometry.centroid
-    lon = c[0].coords[0][0]
-    lat = c[0].coords[0][1]
     a['center_lon'] = [lon]
     a['center_lat'] = [lat]
+    try:
+        hei = grep1line('avg_height', metafile).split('=')[1]
+    except:
+        print('no height information, returning 0 for frame ' + frame)
+        hei = 0
+    a['avg_height'] = [hei]
     return a
 
 
@@ -612,10 +652,10 @@ def get_dfDC(path_to_slcdir, f0=5405000500, burst_interval = 2.758277, returnka 
     if not returnperswath:
         numbursts = np.array(numbursts)
         dfDC = np.nansum(numbursts*np.array(dfDC)) / np.sum(numbursts)
-        ka = np.nansum(numbursts*np.array(kas)) / np.sum(numbursts)
+        kas = np.nansum(numbursts*np.array(kas)) / np.sum(numbursts)
     #kr = np.mean(krs)
     if returnka:
-        return dfDC, ka #, kr
+        return dfDC, kas #, kr
     else:
         return dfDC
 
