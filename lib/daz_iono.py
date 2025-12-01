@@ -834,8 +834,8 @@ def get_abs_iono_corr(frame,esds,framespd):
     return daz_iono
 '''
 
-def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = False, out_tec_master = False,
-                       out_tec_all = False, ionosource='code', use_iri_hei=False, alpha = 0.85):
+def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = False, out_alphas = False,
+                 out_tec_master = False, out_tec_all = False, ionosource='code', use_iri_hei=False, alpha = 0.85):
     ''' Function to calculate iono correction for a given frame.
 
     Args:
@@ -1046,7 +1046,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     fL = f0 - dfDC*0.5
     #tecovl = (TECs_B1 - TEC_master_B1)/(fH*fH) - (TECs_B2 - TEC_master_B2)/(fL*fL)
     #daz_iono = -2*PRF*k*f0/c/dfDC * tecovl
-    
+    #
     if perswath:
         nobursts = frame.split('_')[2]
         nobursts = [int(nobursts[:2]), int(nobursts[2:4]), int(nobursts[4:6])]
@@ -1128,19 +1128,18 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             #daz_iono = PRF * phiesd / (2*np.pi*dfDC)
             daz_iono = PRF * (nesd_iono - nesd_iono_master) # / (2*np.pi*dfDC)
             #return daz_iono
+    out = [daz_iono]
     if out_hionos:
-        if out_tec_master:
-            return daz_iono, hionos, tec_A_master, tec_B_master
-        elif out_tec_all:
-            # experiment...
-            return daz_iono, hionos, tec_A_master, tec_B_master, tecs_A, tecs_B
-        else:
-            return daz_iono, hionos
-    else:
-        if out_tec_all:
-            return daz_iono, tec_A_master, tec_B_master, tecs_A, tecs_B
-        else:
-            return daz_iono
+        out.append(hionos)
+    if out_alphas:
+        out.append(alphas)
+    if out_tec_all or out_tec_master:
+        out.append(tec_A_master)
+        out.append(tec_B_master)
+    if out_tec_all:
+        out.append(tecs_A)
+        out.append(tecs_B)
+    return out
 
 
 

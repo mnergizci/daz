@@ -149,7 +149,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
             alpha = 'auto'
         else:
             alpha = 0.85
-        daz_iono, tec_A_master, tec_B_master, tecs_A, tecs_B = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=False,
+        daz_iono, hionos, alphas, tec_A_master, tec_B_master, tecs_A, tecs_B = di.calculate_daz_iono(frame, esds, frameta, method='gradient', out_hionos=True, out_alphas=True,
                                                                                      out_tec_all=True, ionosource='code', use_iri_hei=use_iri_hei, alpha = alpha)
         daztb['daz_iono'] = daz_iono
         # SET will still work frame-centered only (need this to change??)
@@ -163,6 +163,8 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
             tec_ref = (tec_A_master + tec_B_master) / 2
             daztb['drg_iono_mm'] = 1000* (tecs - tec_ref) * k / (f0 * f0) # in mm
             daztb['dTECS'] = tecs - tec_ref  # for later correlation to azi shift (seems abs TEC plays role!)
+            daztb['alpha'] = alphas
+            daztb['hmF2'] = hionos
             # SET for drg --- we need to get ENUs:
             geoframedir = os.path.join(os.environ['LiCSAR_public'], str(int(frame[:3])), frame)
             e = os.path.join(geoframedir, 'metadata', frame + '.geo.E.tif')
