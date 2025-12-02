@@ -998,8 +998,9 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
                 PippAt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth=heading[j]-180, method='ellipsoid', degrees=True)
                 PippBt, _azimuth = Pippg.displace(distance=bovl_acq_dist, azimuth= heading[j], method='ellipsoid', degrees=True)
                 path_ipp = nv.GeoPath(PippAt, PippBt)
-                path_scene_satgA = nv.GeoPath(Pscene_center, PsatgA)
-                path_scene_satgB = nv.GeoPath(Pscene_center, PsatgB)
+                Pburst_center = wgs84.GeoPoint(latitude=scene_center_lat[j], longitude=scene_center_lon[j], degrees=True)
+                path_scene_satgA = nv.GeoPath(Pburst_center, PsatgA)
+                path_scene_satgB = nv.GeoPath(Pburst_center, PsatgB)
                 # these two points are the ones where we should get TEC
                 PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
                 PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
