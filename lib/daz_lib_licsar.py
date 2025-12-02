@@ -23,6 +23,11 @@ import os, glob
 import pandas as pd
 import framecare as fc
 try:
+    import rioxarray
+except:
+    print('no rioxarray module - GACOS TIF files will not be read (for rng correction)')
+
+try:
     from orbit_lib import *
 except:
     print('LiCSAR orbit_lib not found, cannot process orbit files')
@@ -153,6 +158,7 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                                                                                      out_tec_all=True, ionosource='code', use_iri_hei=use_iri_hei, alpha = alpha)
         daztb['daz_iono'] = daz_iono
         # SET will still work frame-centered only (need this to change??)
+        print('Getting solid earth tides corrections')
         daztb['daz_SET'] = get_SET_for_frame_dazes(frameta, esds)
         if fulloutput:
             import rioxarray
@@ -163,8 +169,8 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
             tec_ref = (tec_A_master + tec_B_master) / 2
             daztb['drg_iono_mm'] = 1000* (tecs - tec_ref) * k / (f0 * f0) # in mm
             daztb['dTECS'] = tecs - tec_ref  # for later correlation to azi shift (seems abs TEC plays role!)
-            daztb['alpha'] = alphas
-            daztb['hmF2'] = hionos
+            daztb['alpha'] = alphas[:-1]
+            daztb['hmF2'] = hionos[:-1]
             # SET for drg --- we need to get ENUs:
             geoframedir = os.path.join(os.environ['LiCSAR_public'], str(int(frame[:3])), frame)
             e = os.path.join(geoframedir, 'metadata', frame + '.geo.E.tif')
@@ -1104,6 +1110,8 @@ def get_gacos_in_coord(lon,lat,epochstr, frame, inmm=True, domean=True):
             else:
                 out = float(f[0].sel(x=lon, y=lat, method='nearest').values)
         except:
+            print('error reading')
+            print(gacospath)
             return np.nan
         if inmm:
             out = rad2mm_s1(out)

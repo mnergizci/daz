@@ -141,14 +141,14 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
             if getalpha:
                 iri_acq_gps = iri.IRI(acqtime, [0, 20000, 20000], glat, glon)
                 alpha = float(iri_acq.TEC / iri_acq_gps.TEC)
-                print('using alpha of ' + str(alpha))
+                # print('using alpha of ' + str(alpha))
             alphas.append(alpha)
         elif source == 'code':
             if getalpha:
                 iri_acq_gps = iri.IRI(acqtime, [0, 20000, 20000], glat, glon )
                 iri_acq = iri.IRI(acqtime, altkmrange, glat, glon )
                 alpha = float(iri_acq.TEC/iri_acq_gps.TEC)
-                print('using alpha of '+str(alpha))
+                # print('using alpha of '+str(alpha))
             alphas.append(alpha)
             try:
                 if type(tecxr) != type(None):
@@ -278,8 +278,6 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
     # check if exists:
 
     if not noJPL:
-        if printout:
-            print('JPL-HR GIM data')
         fna = glob.glob(storedir + '/jpld' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '*.nc')  # prioritize JPL-HR GIM
         if fna:  
             ionix = os.path.join(storedir, fna[0])  # Found JPL-HR GIM file, use it
@@ -295,8 +293,6 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         ionix = None
 
     if not ionix:
-        if printout:
-            print('CODE GIM data')
         # If JPL-HR GIM is missing or noJPL is True, fallback to CODE GIM
         fna = glob.glob(storedir + '/????' + acqtime.strftime('%j') + '0.' + acqtime.strftime('%y') + '?')  # CODE GIM
         if fna:
@@ -304,9 +300,13 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         else:
             # If no CODE GIM is found, try to download it
             ionix = download_code_data(acqtime, storedir)
-    
+    elif printout:
+        print('using JPL-HR GIM data')
+    #
     if not ionix:
         return False
+    elif printout:
+        print('using CODE GIM data')
     #else:
     #    rc=os.system('rm '+fullpath) # clean the .Z
     # prep 
@@ -921,9 +921,13 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     df = pd.DataFrame(acq_times)
     # 2024: not clear if IRI F2 peak altitude is correct. Allowing the standard 450 km assumption by CODE (I think TECs will get scaled, so the gradient should be still ok. Not tested)
     # 2025: tested. IRI is more correct. especially IRI2020
-    if use_iri_hei or out_hionos:
+    if use_iri_hei:
         # get hionos in that middle point:
-        print('extracting hmF2 estimates from IRI model')
+        if alpha == 'auto':
+            stralpha='and alpha '
+        else:
+            stralpha=''
+        print('extracting hmF2 '+stralpha+'estimates from IRI model')
         _, hionos, alphas = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True, returnalpha=True, alpha=alpha)
         hiono_master = hionos[-1]
         selected_frame_esds['hiono'] = hionos[:-1]  ###*1000 # convert to metres, avoid last measure, as this is 'master'
@@ -931,7 +935,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         if alpha != 'auto':
             alphas = np.array(alphas)*0 + alpha
         df['alpha'] = alphas
-        alpha_master = alphas[-1]
+        # alpha_master = alphas[-1]
         selected_frame_esds['alpha'] = alphas[:-1]
     else:
         #df['hiono'] = 450 # standard altitude used by CODE
@@ -946,7 +950,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             print('You have set to estimate alpha but avoiding IRI - please enable use_iri_hei')
             return False
         selected_frame_esds['alpha'] = alpha
-        alpha_master = alpha
+        # alpha_master = alpha
         df['alpha'] = alpha
         #
     ############## now calculate TEC using the SLM knowledge, i.e. different A,B per epoch (!)
@@ -986,7 +990,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             tecs_A_swaths = np.array([], dtype=np.float64)
             tecs_B_swaths = np.array([], dtype=np.float64)
             for j in range(len(range_IPP)):
-                print('debug: swath '+str(j))
+                #print('debug: swath '+str(j))
                 x, y, z = aer2ecef(azimuthDeg[j], elevationDeg[j], range_IPP[j], scene_center_lat[j], scene_center_lon[j], 0) #scene_alt)
                 ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
                 Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
@@ -1005,7 +1009,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
                 PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
                 PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
                 pdist, pa1, pa2 = PippA.distance_and_azimuth(PippB, degrees=True)
-                print('debug: distance between the IPP points is ' + str(int(pdist)) + ' m and their azimuth ' + str(
+                print('debug: swath '+str(j+1)+': distance between the IPP points is ' + str(int(pdist)) + ' m and their azimuth ' + str(
                     int(pa1)) + ' deg')
                 if ionosource != 'code':
                     TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate-pd.Timedelta(bovl_dtime/2, 's')], False, source=ionosource, alpha = alpha)[0]
@@ -1096,8 +1100,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         for tecind in range(len(tecs_A)):
             tecs_A_ep = tecs_A[tecind]
             tecs_B_ep = tecs_B[tecind]
-            print('debug, tecs_A_ep:')
-            print(tecs_A_ep)
+            #print('debug, tecs_A_ep:')
+            #print(tecs_A_ep)
             daz_iono_ep = []
             for j in range(len(tec_A_master)):
                 tecovl = (tec_A_master[j] - tecs_A_ep[j])/fH[j] - (tec_B_master[j] - tecs_B_ep[j])/fL[j]
