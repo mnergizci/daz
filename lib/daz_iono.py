@@ -983,8 +983,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
                 tecxr=get_vtec_from_code(epochdate, lat=0, lon=0, return_fullxr = True)
             range_IPP = slantRange * hiono / sat_alt
             sin_thetaiono = earth_radius/(earth_radius+hiono) * np.sin(theta)
-            tecs_A_swaths = np.array([], dtype=np.float32)
-            tecs_B_swaths = np.array([], dtype=np.float32)
+            tecs_A_swaths = np.array([], dtype=np.float64)
+            tecs_B_swaths = np.array([], dtype=np.float64)
             for j in range(len(range_IPP)):
                 x, y, z = aer2ecef(azimuthDeg[j], elevationDeg[j], range_IPP[j], scene_center_lat[j], scene_center_lon[j], 0) #scene_alt)
                 ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)

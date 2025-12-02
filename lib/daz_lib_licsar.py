@@ -371,9 +371,10 @@ def get_frameta(frame, perswath=False):
     path_to_slcdir = os.path.join(os.environ['LiCSAR_procdir'], str(tr), frame, 'SLC', primepoch)
     try:
         dfDC, ka = get_dfDC(path_to_slcdir, returnperswath = perswath)
-        a['swath_ka'] = [ka]
-        a['swath_dfDC'] = [dfDC]
-        dfDC, ka = get_dfDC(path_to_slcdir) # this is to keep per-frame values..
+        if perswath:
+            a['swath_ka'] = [ka]
+            a['swath_dfDC'] = [dfDC]
+            dfDC, ka = get_dfDC(path_to_slcdir) # this is to keep per-frame values..
     except:
         print('some error occurred during extracting dfDC per swath - cancelling per swath option')
         perswath = False
