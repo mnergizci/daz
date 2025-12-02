@@ -952,6 +952,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         selected_frame_esds['alpha'] = alpha
         # alpha_master = alpha
         df['alpha'] = alpha
+        alphas = df.alpha.values
         #
     ############## now calculate TEC using the SLM knowledge, i.e. different A,B per epoch (!)
     # (note that the last hiono is for the master/reference epoch
