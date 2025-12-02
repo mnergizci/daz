@@ -906,6 +906,12 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     # 2023/08: checked using orbits - the slantranfe is wrt ellipsoid! setting scene alt 0
     x, y, z = aer2ecef(azimuthDeg, elevationDeg, slantRange, scene_center_lat, scene_center_lon, 0) #scene_alt)
     satg_lat, satg_lon, sat_alt = ecef2latlonhei(x, y, z)
+    print('debug: sat coordinates are expected as')
+    print('lat,lon,alt=')
+    print([satg_lat, satg_lon, sat_alt])
+    print('x,y,z=')
+    print([x,y,z])
+    print('--------')
     Psatg = wgs84.GeoPoint(latitude=satg_lat, longitude=satg_lon, degrees=True)
     # get middle point between scene and sat - and get F2 altitude (max TEC) for it
     path = nv.GeoPath(Pscene_center.to_nvector(), Psatg.to_nvector())
@@ -918,10 +924,15 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     if use_iri_hei or out_hionos:
         # get hionos in that middle point:
         print('extracting hmF2 estimates from IRI model')
-        tecs, hionos = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True)
+        _, hionos, alphas = get_tecs(Pmid_scene_sat.latitude_deg, Pmid_scene_sat.longitude_deg, 800, acq_times, source='iri', returnhei = True, returnalpha=True, alpha=alpha)
         hiono_master = hionos[-1]
         selected_frame_esds['hiono'] = hionos[:-1]  ###*1000 # convert to metres, avoid last measure, as this is 'master'
         df['hiono'] = hionos
+        if alpha != 'auto':
+            alphas = np.array(alphas)*0 + alpha
+        df['alpha'] = alphas
+        alpha_master = alphas[-1]
+        selected_frame_esds['alpha'] = alphas[:-1]
     else:
         #df['hiono'] = 450 # standard altitude used by CODE
         hiono = 290  # more correct estimate
@@ -930,6 +941,13 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         #hiono_master = 450
         hiono_master = hiono
         selected_frame_esds['hiono'] = hiono
+        # and alphas
+        if alpha == 'auto':
+            print('You have set to estimate alpha but avoiding IRI - please enable use_iri_hei')
+            return False
+        selected_frame_esds['alpha'] = alpha
+        alpha_master = alpha
+        df['alpha'] = alpha
         #
     ############## now calculate TEC using the SLM knowledge, i.e. different A,B per epoch (!)
     # (note that the last hiono is for the master/reference epoch
@@ -946,13 +964,15 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         scene_center_lat = np.array(frameta['swath_center_lat'].values[0])
         scene_center_lon = np.array(frameta['swath_center_lat'].values[0])
         dfDC = np.array(frameta['swath_dfDC'].values[0])
-        ka = np.array(frameta['swath_ka'].values[0])
+        # ka = np.array(frameta['swath_ka'].values[0]) # not used....
         perswath=True
         method='gradient'
     else:
         perswath=False
     for i,a in df.iterrows():
         hiono = float(a['hiono']*1000) # m
+        # overwriting input alpha param, as now fixed by pre-init above
+        alpha = float(a['alpha'])
         epochdate = a['epochdate']
         #alpha_to_use = alpha
         print('running for epochtime: '+str(epochdate))
@@ -983,18 +1003,19 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
                 PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
                 PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
                 if ionosource != 'code':
-                    TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
-                    TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate], False, source=ionosource, alpha = alpha)[0]
+                    TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate-pd.Timedelta(bovl_dtime/2, 's')], False, source=ionosource, alpha = alpha)[0]
+                    TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate+pd.Timedelta(bovl_dtime/2, 's')], False, source=ionosource, alpha = alpha)[0]
                 else:
                     TECV_A = get_vtec_from_tecxr(tecxr, epochdate-pd.Timedelta(bovl_dtime/2, 's'), PippA.latitude_deg, PippA.longitude_deg, method='linear')
                     TECV_B = get_vtec_from_tecxr(tecxr, epochdate+pd.Timedelta(bovl_dtime/2, 's'), PippB.latitude_deg, PippB.longitude_deg, method='linear')
+                    TECV_A = TECV_A * alpha
+                    TECV_B = TECV_B * alpha
                 TECS_A = TECV_A/np.sqrt(1-sin_thetaiono[j]**2)
                 TECS_B = TECV_B/np.sqrt(1-sin_thetaiono[j]**2)
                 tecs_A_swaths = np.append(tecs_A_swaths, TECS_A)
                 tecs_B_swaths = np.append(tecs_B_swaths, TECS_B)
             tecs_A.append(tecs_A_swaths) #.mean())
             tecs_B.append(tecs_B_swaths) #.mean())
-            
         else:
             # first, get IPP - ionosphere pierce point
             # range to IPP can be calculated using:
@@ -1113,11 +1134,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             #phi_ionoramp_burst = fL*fH/(f0*(fH*fH - fL*fL)) * (dphaionL*fH - dphaionH*fL)
             phi_ionoramp_burst = phaionH - phaionL
             phi_ionoramp_burst_m = phaionH_m - phaionL_m
-            #i suppose i relate it to burst overlap interval (i.e. 2.7 s /10)
-            #burst_ovl_interval = 2.758277/10 #s
+            # or relate it to burst overlap interval?
             burst_interval = 2.758277
-            # 2025: the bovl interval is actually
-            burst_interval = 5.7 # s
             #kion = phi_ionoramp_burst / burst_ovl_interval # rad/s
             kion = phi_ionoramp_burst / burst_interval # rad/s
             kion_m = phi_ionoramp_burst_m / burst_interval # rad/s
@@ -1139,6 +1157,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     if out_tec_all:
         out.append(tecs_A)
         out.append(tecs_B)
+    if len(out)==1:
+        out=out[0]
     return out
 
 
