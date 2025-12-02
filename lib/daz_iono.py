@@ -986,6 +986,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
             tecs_A_swaths = np.array([], dtype=np.float64)
             tecs_B_swaths = np.array([], dtype=np.float64)
             for j in range(len(range_IPP)):
+                print('debug: swath '+str(j))
                 x, y, z = aer2ecef(azimuthDeg[j], elevationDeg[j], range_IPP[j], scene_center_lat[j], scene_center_lon[j], 0) #scene_alt)
                 ippg_lat, ippg_lon, ipp_alt = ecef2latlonhei(x, y, z)
                 Pippg = wgs84.GeoPoint(latitude=ippg_lat, longitude=ippg_lon, degrees=True)
@@ -1002,6 +1003,9 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
                 # these two points are the ones where we should get TEC
                 PippA = path_ipp.intersect(path_scene_satgA).to_geo_point()
                 PippB = path_ipp.intersect(path_scene_satgB).to_geo_point()
+                pdist, pa1, pa2 = PippA.distance_and_azimuth(PippB, degrees=True)
+                print('debug: distance between the IPP points is ' + str(int(pdist)) + ' m and their azimuth ' + str(
+                    int(pa1)) + ' deg')
                 if ionosource != 'code':
                     TECV_A = get_tecs(PippA.latitude_deg, PippA.longitude_deg, round(sat_alt/1000), [epochdate-pd.Timedelta(bovl_dtime/2, 's')], False, source=ionosource, alpha = alpha)[0]
                     TECV_B = get_tecs(PippB.latitude_deg, PippB.longitude_deg, round(sat_alt/1000), [epochdate+pd.Timedelta(bovl_dtime/2, 's')], False, source=ionosource, alpha = alpha)[0]
@@ -1051,6 +1055,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
     #
     tec_A_master = tecs_A[-1]
     tec_B_master = tecs_B[-1]
+    print('debug: tec_A_master are:')
+    print(tec_A_master)
     tecs_A = tecs_A[:-1]
     tecs_B = tecs_B[:-1]
     #
@@ -1089,6 +1095,8 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         for tecind in range(len(tecs_A)):
             tecs_A_ep = tecs_A[tecind]
             tecs_B_ep = tecs_B[tecind]
+            print('debug, tecs_A_ep:')
+            print(tecs_A_ep)
             daz_iono_ep = []
             for j in range(len(tec_A_master)):
                 tecovl = (tec_A_master[j] - tecs_A_ep[j])/fH[j] - (tec_B_master[j] - tecs_B_ep[j])/fL[j]
