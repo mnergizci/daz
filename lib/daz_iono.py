@@ -962,7 +962,7 @@ def calculate_daz_iono(frame, esds, framespd, method = 'gradient', out_hionos = 
         theta = np.radians(np.array(frameta['swath_avg_incidence_angle'].values[0]))
         elevationDeg = 90-np.array(frameta['swath_avg_incidence_angle'].values[0])
         scene_center_lat = np.array(frameta['swath_center_lat'].values[0])
-        scene_center_lon = np.array(frameta['swath_center_lat'].values[0])
+        scene_center_lon = np.array(frameta['swath_center_lon'].values[0])
         dfDC = np.array(frameta['swath_dfDC'].values[0])
         # ka = np.array(frameta['swath_ka'].values[0]) # not used....
         perswath=True
