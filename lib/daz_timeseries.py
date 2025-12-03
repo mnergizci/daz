@@ -33,10 +33,84 @@ def estimate_s1ab(frame_esds, col = 'daz_mm_notide_noiono', rmsiter = 50, printo
 
 
 # for range, e.g.:
+# e = e[e.cc_range != 0]
 # epochsdt = e.epochdate.values
 # mmvalues = e.cc_range*2300 - e.drg_GACOS_mm_center - e.drg_iono_mm_giri - e.drg_SET_mm
 # v,c,stderr = estimate_slope(epochsdt, mmvalues)
 
+'''
+import pandas as pd
+from daz_lib import *
+import daz_timeseries as ts
+import daz_lib_licsar as dll
+
+try:
+    frametas=pd.read_csv('frametas.txt',index_col=0)
+except:
+    print('cannot load frametas - starting from scratch')
+    frametas = pd.DataFrame()
+
+csvs = glob.glob('????_?????_??????.full.csv')
+for csv in csvs:
+    fr = csv.split('.')[0]
+    if 'frame' in frametas:
+        if fr in frametas['frame']:
+            continue
+    print(fr)
+    #fr = '001A_04784_201818'
+    #csv = fr+'.full.csv'
+    esds = pd.read_csv(csv)
+    esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
+    esds = esds.sort_values('epochdate')
+    # drg:
+    e = esds.copy(deep=True)
+    e = e[e.cc_range != 0]
+    # fix gacos ... old run
+    ############
+    frameta=dll.get_frameta(fr)
+    mstr=frameta.master.values[0]
+    lon=frameta.center_lon.values[0]
+    lat=frameta.center_lat.values[0]
+    gcs_mm = []
+    for edt in e.epochdate.values:
+        gcs = dll.get_gacos_in_coord(lon, lat, str(edt).replace('-',''), fr, inmm=True, domean=False)
+        gcs_mm.append(gcs*(-1))
+    #
+    gcs_master = dll.get_gacos_in_coord(lon,lat,mstr, fr, inmm=True, domean=False)*(-1)
+    e['drg_GACOS_mm']=np.array(gcs_mm)-gcs_master
+    e['drg_GACOS_mm']=e['drg_GACOS_mm']-e['drg_GACOS_mm'].mean()
+    ############
+    e = e[~np.isnan(e.drg_GACOS_mm)]
+    epochsdt = e.epochdate.values
+    mmvalues = e.cc_range*2300 - e.drg_GACOS_mm - e.drg_iono_mm - e.drg_SET_mm
+    mmvalues = mmvalues-mmvalues.mean()
+    vrg,crg,stderrrg=ts.estimate_slope(epochsdt, mmvalues)
+    #
+    # mean-GACOSed:
+    # RMSE diff: 73.91201754308052 -> 70.20406408296195 (303/294 samples)
+    # (-14.427248463375582, 44.8353862579642, 70.20406408296195)
+    #
+    # center GACOS:
+    # RMSE diff: 73.84176222140829 -> 70.94659605698267 (303/297 samples)
+    # (-13.715652608901006, 42.23549261552434, 70.94659605698267)
+    #
+    # daz
+    e = esds.copy(deep=True)
+    e = e[e.daz != 0]
+    epochsdt = e.epochdate.values
+    mmvalues = 14000*(e.daz - e.daz_SET - e.daz_iono)
+    mmvalues = mmvalues-mmvalues.mean()
+    vaz,caz,stderraz=ts.estimate_slope(epochsdt, mmvalues)
+    frameta['vel_rg'] = vrg
+    frameta['vel_az'] = vaz
+    frameta['std_rg'] = stderrrg
+    frameta['std_az'] = stderraz
+    frametas = frametas.append(frameta)
+
+frametas = frametas.reset_index(drop=True)
+frametas.to_csv('frametas.txt')
+
+'''
 def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = True):
     ''' make sure the inputs are np arrays (e.g. pd.column.values) '''
     epochs = epochsdt[mmvalues != 0]
@@ -45,7 +119,7 @@ def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = Tru
     years = np.array([float(x.days)/365.25 for x in epochs], dtype=float)
     # years = epochs.apply(lambda x: float(x.days)/365.25)
     A = np.vstack((years,np.ones_like(years))).T
-    res = model_filter_v2(A, mmvalues, iters=rmsiter, target_rmse=target_rmse, printout=printout)
+    res = model_filter_v2(A, mmvalues, iters=rmsiter, target_rmse=target_rmse, outsigmammy=True, printout=printout)
     model=res[0]
     stderr=res[1]
     v = model[0]
@@ -95,7 +169,7 @@ def correct_s1ab(esds, framespd, cols = ['daz_mm', 'daz_mm_notide', 'daz_mm_noti
     return esds, framespd
 
 # reduced version, 2024
-def model_filter_v2(A, y, limrms=3, iters=2, target_rmse = 30, full_stderr = False, weighted = False, printout = True):
+def model_filter_v2(A, y, limrms=3, iters=2, target_rmse = 30, outsigmammy = True, full_stderr = False, weighted = False, printout = True):
     '''
     limrms is 'how many RMSEs should be used to remove outliers'
     '''
@@ -125,7 +199,7 @@ def model_filter_v2(A, y, limrms=3, iters=2, target_rmse = 30, full_stderr = Fal
         if rmse < target_rmse:
             break
     if printout:
-        print('RMSE diff: '+str(oldrmse)+' -> '+str(rmse)+' ('+str(oldlen)+'/'+str(len(y))+' samples)')
+        print('RMSE diff: '+str(oldrmse)+' -> '+str(rmse)+' ('+str(oldlen)+' -> '+str(len(y))+' samples)')
     if weighted:
         print('not done, as perhaps not needed')
     if full_stderr:
@@ -138,6 +212,8 @@ def model_filter_v2(A, y, limrms=3, iters=2, target_rmse = 30, full_stderr = Fal
             stderr = np.nan
     else:
         stderr = rmse
+    if outsigmammy
+        stderr = np.sqrt(stderr**2/len(y))
     return model, stderr
 
 
