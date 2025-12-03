@@ -197,8 +197,8 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                     E, N, U = get_SET_coords(lon, lat, epochdtstr)
                     drg_tide_m = E*e + N*n + U*u
                     drg_tides_mm.append(1000*drg_tide_m*(-1))
-                    # gcs = get_gacos_in_coord(lon,lat,str(edt).replace('-',''), frame, inmm=True)
-                    gcs = get_gacos_in_coord(lon, lat, str(edt).replace('-',''), frame, inmm=True, domean=True) # mean is slower but... better here(?)
+                    gcs = get_gacos_in_coord(lon,lat,str(edt).replace('-',''), frame, inmm=True)
+                    # gcs = get_gacos_in_coord(lon, lat, str(edt).replace('-',''), frame, inmm=True, domean=True) # mean is WORSE!!!!
                     gcs_mm.append(gcs*(-1))
                 drg_tides_mm = np.array(drg_tides_mm)
                 gcs_mm = np.array(gcs_mm)
@@ -208,7 +208,8 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                     mastrT = mastr + 'T' + centre_time
                     E, N, U = get_SET_coords(lon, lat, mastrT)
                     mastr_SET = 1000*(E * e + N * n + U * u * (-1))
-                    mastr_GACOS = get_gacos_in_coord(lon, lat, mastr.replace('-',''), frame, inmm=True, domean=True)
+                    mastr_GACOS = get_gacos_in_coord(lon, lat, mastr.replace('-',''), frame, inmm=True, domean=False)
+                    mastr_GACOS = mastr_GACOS * (-1)
                     daztb['drg_SET_mm'] = daztb['drg_SET_mm'] - mastr_SET
                     daztb['drg_GACOS_mm'] = daztb['drg_GACOS_mm'] - mastr_GACOS
                 except:

@@ -300,13 +300,15 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         else:
             # If no CODE GIM is found, try to download it
             ionix = download_code_data(acqtime, storedir)
+        if not ionix:
+            if printout:
+                print('no GIM data available for '+str(acqtime))
+            return False
+        elif printout:
+            print('using CODE GIM data')
     elif printout:
         print('using JPL-HR GIM data')
     #
-    if not ionix:
-        return False
-    elif printout:
-        print('using CODE GIM data')
     #else:
     #    rc=os.system('rm '+fullpath) # clean the .Z
     # prep 
