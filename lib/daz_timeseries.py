@@ -32,7 +32,12 @@ def estimate_s1ab(frame_esds, col = 'daz_mm_notide_noiono', rmsiter = 50, printo
     return v,c,stderr,c_AB
 
 
-def estimate_slope(epochsdt, mmvalues, rmsiter=5, printout = True):
+# for range, e.g.:
+# epochsdt = e.epochdate.values
+# mmvalues = e.cc_range*2300 - e.drg_GACOS_mm_center - e.drg_iono_mm_giri - e.drg_SET_mm
+# v,c,stderr = estimate_slope(epochsdt, mmvalues)
+
+def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = True):
     ''' make sure the inputs are np arrays (e.g. pd.column.values) '''
     epochs = epochsdt[mmvalues != 0]
     mmvalues = mmvalues[mmvalues != 0]
@@ -40,7 +45,7 @@ def estimate_slope(epochsdt, mmvalues, rmsiter=5, printout = True):
     years = np.array([float(x.days)/365.25 for x in epochs], dtype=float)
     # years = epochs.apply(lambda x: float(x.days)/365.25)
     A = np.vstack((years,np.ones_like(years))).T
-    res = model_filter_v2(A, mmvalues, iters=rmsiter, target_rmse=300, printout=printout)
+    res = model_filter_v2(A, mmvalues, iters=rmsiter, target_rmse=target_rmse, printout=printout)
     model=res[0]
     stderr=res[1]
     v = model[0]
