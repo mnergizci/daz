@@ -212,7 +212,7 @@ def model_filter_v2(A, y, limrms=3, iters=2, target_rmse = 30, outsigmammy = Tru
             stderr = np.nan
     else:
         stderr = rmse
-    if outsigmammy
+    if outsigmammy:
         stderr = np.sqrt(stderr**2/len(y))
     return model, stderr
 
