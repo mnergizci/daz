@@ -337,6 +337,29 @@ def df_compare_new_orbits(esds, col = 'daz_mm_notide_noiono_grad_OK'):
 
 
 
+def decompose_azrg2NEU(frametas):
+    velrg = 'vel_rg'
+    velaz = 'vel_az'
+    stdrg = 'std_rg'
+    stdaz = 'std_az'
+    A = []
+    d = []
+    Qt = []
+    # do E,N,U:
+    for i, row in df.iterrows():
+        # for az:
+        heading = float(row['heading'])
+        At = [np.sin(np.radians(heading)), np.cos(np.radians(heading)), 0]
+        Qt.append(1/row[stdaz]**2)
+        A.append(At)
+        d.append(row[velaz])
+        # for rg:
+        incangle = float(row['avg_incidence_angle'])
+        At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(heading)), np.cos(np.radians(incangle))]
+        # TODO: the term for N is probably wrong here....
+        Qt.append(1/row[stdrg]**2)
+        A.append(At)
+        d.append(row[velrg])
 
 #function for decomposition (by LS inversion)
 def decompose_azi2NE(df, col = 'daz_mm_notide_noiono_grad'):

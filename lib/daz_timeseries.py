@@ -50,11 +50,11 @@ except:
     print('cannot load frametas - starting from scratch')
     frametas = pd.DataFrame()
 
-csvs = glob.glob('????_?????_??????.full.csv')
+csvs = glob.glob('????_?????_??????.full*.csv')
 for csv in csvs:
     fr = csv.split('.')[0]
     if 'frame' in frametas:
-        if fr in frametas['frame']:
+        if fr in frametas['frame'].values:
             continue
     print(fr)
     #fr = '001A_04784_201818'
@@ -76,15 +76,24 @@ for csv in csvs:
         gcs = dll.get_gacos_in_coord(lon, lat, str(edt).replace('-',''), fr, inmm=True, domean=False)
         gcs_mm.append(gcs*(-1))
     #
-    gcs_master = dll.get_gacos_in_coord(lon,lat,mstr, fr, inmm=True, domean=False)*(-1)
-    e['drg_GACOS_mm']=np.array(gcs_mm)-gcs_master
-    e['drg_GACOS_mm']=e['drg_GACOS_mm']-e['drg_GACOS_mm'].mean()
-    ############
-    e = e[~np.isnan(e.drg_GACOS_mm)]
-    epochsdt = e.epochdate.values
-    mmvalues = e.cc_range*2300 - e.drg_GACOS_mm - e.drg_iono_mm - e.drg_SET_mm
+    if np.isnan(gcs_mm).sum() >= len(gcs_mm)/2:
+        print('skipping gacos')
+        epochsdt = e.epochdate.values
+        mmvalues = e.cc_range*2300 - e.drg_iono_mm - e.drg_SET_mm
+    else:
+        gcs_master = dll.get_gacos_in_coord(lon,lat,mstr, fr, inmm=True, domean=False)*(-1)
+        e['drg_GACOS_mm']=np.array(gcs_mm)-gcs_master
+        e['drg_GACOS_mm']=e['drg_GACOS_mm']-e['drg_GACOS_mm'].mean()
+        ############
+        e = e[~np.isnan(e.drg_GACOS_mm)]
+        epochsdt = e.epochdate.values
+        mmvalues = e.cc_range*2300 - e.drg_GACOS_mm - e.drg_iono_mm - e.drg_SET_mm
     mmvalues = mmvalues-mmvalues.mean()
-    vrg,crg,stderrrg=ts.estimate_slope(epochsdt, mmvalues)
+    try:
+        vrg,crg,stderrrg=ts.estimate_slope(epochsdt, mmvalues)
+    except:
+        print('some error, skipping')
+        continue
     #
     # mean-GACOSed:
     # RMSE diff: 73.91201754308052 -> 70.20406408296195 (303/294 samples)
@@ -100,7 +109,11 @@ for csv in csvs:
     epochsdt = e.epochdate.values
     mmvalues = 14000*(e.daz - e.daz_SET - e.daz_iono)
     mmvalues = mmvalues-mmvalues.mean()
-    vaz,caz,stderraz=ts.estimate_slope(epochsdt, mmvalues)
+    try:
+        vaz,caz,stderraz=ts.estimate_slope(epochsdt, mmvalues)
+    except:
+        print('some error during vel_az, skiipping')
+        continue
     frameta['vel_rg'] = vrg
     frameta['vel_az'] = vaz
     frameta['std_rg'] = stderrrg
