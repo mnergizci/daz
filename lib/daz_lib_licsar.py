@@ -34,7 +34,7 @@ except:
 
 
 from daz_lib import *
-
+import datetime as dt # just in case..
 
 def extract_all2txt(outfr = 'frames.txt', outdaz = 'esds.txt', inframelist = None, fix_epoch_time = False):
     """ Main function to extract all frame and daz data from the LiCSAR database.
@@ -108,7 +108,7 @@ def extract2txt_esds_all_frames(framelist, outfile='esds.txt', fix_epoch_time = 
     dazes.to_csv(outfile, index=False)
 
 
-def extract2txt_esds_frame(frame, fix_epoch_time = False):
+def extract2txt_esds_frame(frame, fix_epoch_time = False, datemin=dt.date(2014,10,1), datemax=dt.date.today()):
     '''
     extracts to esds txt full data for given frame, from database
     the resultant txt file is a csv as:
@@ -116,7 +116,7 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
 
     or with epochtime as well, if this was set by fix_epoch_time (takes long...)
     '''
-    a = get_daz_frame(frame)
+    a = get_daz_frame(frame, datemin=datemin, datemax=datemax)
     if 'epoch' in a:
         a['epoch']=a.epoch.apply(lambda x: x.strftime('%Y%m%d'))
     a['esd_master']=a.rslc3.apply(lambda x: x.strftime('%Y%m%d'))
@@ -132,7 +132,8 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False):
     return a[cols]
 
 
-def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False, corr_per_swath = True):
+def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False, corr_per_swath = True,
+                  datemin=dt.date(2014,10,1), datemax=dt.date.today()):
     ''' Function to extract all frame daz values from the LiCSInfo database.
 
     Args:
@@ -141,13 +142,16 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
         include_corrections (bool)  if True, will perform also SET and iono corrections and add to the table (or daz if False fulloutput)
         use_iri_hei (bool)          only with include_corrections - will try scale TEC values with IRI model
         corr_per_swath (bool)       will bit improve corrections using center region per swath rather than from frame center
+        datemin, datemax (dt.date)  will limit the epochs
     '''
     polyid=lq.get_frame_polyid(frame)[0][0]
     daztb = lq.do_pd_query('select * from esd where polyid={};'.format(polyid))
+    daztb = daztb[daztb.epoch >= datemin]
+    daztb = daztb[daztb.epoch <= datemax]
     if include_corrections:
         frameta = get_frameta(frame, perswath=corr_per_swath)
         mastr = str(pd.to_datetime(frameta.master[0]).date())
-        esds = extract2txt_esds_frame(frame)
+        esds = extract2txt_esds_frame(frame, datemin=datemin, datemax=datemax)
         esds['epochdate'] = esds.apply(lambda x : pd.to_datetime(str(x.epoch)).date(), axis=1)
         import daz_iono as di
         if use_iri_hei:
@@ -201,8 +205,10 @@ def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri
                 daztb['drg_SET_mm'] = drg_tides_mm
                 daztb['drg_GACOS_mm'] = gcs_mm
                 try:
-                    mastr_SET = daztb[daztb['epoch']==mastr]['drg_SET_mm'].values[0]
-                    mastr_GACOS = daztb[daztb['epoch'] == mastr]['drg_GACOS_mm'].values[0]
+                    mastrT = mastr + 'T' + centre_time
+                    E, N, U = get_SET_coords(lon, lat, mastrT)
+                    mastr_SET = 1000*(E * e + N * n + U * u * (-1))
+                    mastr_GACOS = get_gacos_in_coord(lon, lat, mastr.replace('-',''), frame, inmm=True, domean=True)
                     daztb['drg_SET_mm'] = daztb['drg_SET_mm'] - mastr_SET
                     daztb['drg_GACOS_mm'] = daztb['drg_GACOS_mm'] - mastr_GACOS
                 except:
