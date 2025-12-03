@@ -355,8 +355,9 @@ def decompose_azrg2NEU(frametas):
         d.append(row[velaz])
         # for rg:
         incangle = float(row['avg_incidence_angle'])
-        At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(heading)), np.cos(np.radians(incangle))]
-        # TODO: the term for N is probably wrong here....
+        At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(incangle))*np.sin(np.radians(heading)), np.cos(np.radians(incangle))]
+        # TODO: check
+        # 
         Qt.append(1/row[stdrg]**2)
         A.append(At)
         d.append(row[velrg])
