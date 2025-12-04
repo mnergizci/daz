@@ -17,9 +17,10 @@ Outputs :
 =====
 Usage
 =====
-daz_06_decompose.py [--infra frames_final.csv] [--outdec decomposed.csv] [--velnc vel_gps_kreemer.nc]
+daz_06_decompose.py [--infra frames_final.csv] [--outdec decomposed.csv] [--velnc vel_gps_kreemer.nc] [--outres 2.25]
 
 Note: param velnc is optional, but if provided as nc file with VEL_E, VEL_N variables, it will be used as GPS velocities.
+outres stands for output resolution - how large grid cell size (default: 2.25 deg)
 
 """
 #%% Change log
@@ -51,10 +52,11 @@ def main(argv=None):
     inframesfile = 'frames_final.csv'
     outdecfile = 'decomposed.csv'
     velnc='vel_gps_kreemer.nc'
+    outres = 2.25 # degrees
     #%% Read options
     try:
         try:
-            opts, args = getopt.getopt(argv[1:], "h", ["help", "infra=", "outdec=", "velnc="])
+            opts, args = getopt.getopt(argv[1:], "h", ["help", "infra=", "outdec=", "outres=","velnc="])
         except getopt.error as msg:
             raise Usage(msg)
         for o, a in opts:
@@ -63,6 +65,8 @@ def main(argv=None):
                 return 0
             elif o == "--infra":
                 inframesfile = a
+            elif o == "--outres":
+                outres = float(a)
             elif o == "--outdec":
                 outdecfile = a
             elif o == "--velnc":
