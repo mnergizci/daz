@@ -592,14 +592,14 @@ def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
     grid_cells = []
     centroid_lon = []
     centroid_lat = []
-    for x0 in np.arange(xmin-cell_size/2, xmax+cell_size/2, cell_size ):
-        for y0 in np.arange(ymin-cell_size/2, ymax+cell_size/2, cell_size):
+    for x0 in np.arange(xmin-cell_size/2, xmax+cell_size, cell_size ):
+        for y0 in np.arange(ymin-cell_size/2, ymax+cell_size, cell_size):
             # bounds
-            x1 = x0-cell_size
-            y1 = y0+cell_size
+            x1 = x0+cell_size
+            y1 = y0+cell_size               # minx, miny, maxx, maxy
             grid_cells.append( shapely.geometry.box(x0, y0, x1, y1)  )
-            centroid_lon.append(x0)
-            centroid_lat.append(y0)
+            centroid_lon.append(x0+cell_size/2)
+            centroid_lat.append(y0+cell_size/2)
     
     grid = geopandas.GeoDataFrame(grid_cells, columns=['geometry'],
                                      crs=crs)
