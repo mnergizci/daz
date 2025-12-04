@@ -85,7 +85,7 @@ def main(argv=None):
     # processing itself:
     framespd = pd.read_csv(inframesfile)
     print('decomposing frames')
-    gridagg = decompose_framespd(framespd)
+    gridagg = decompose_framespd(framespd, cell_size = outres)
     print('getting ITRF 2014 PMM for new cells')
     if os.path.exists(velnc):
         print('also extracting values from the available GNSS-based grid')
