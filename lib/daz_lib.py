@@ -337,7 +337,7 @@ def df_compare_new_orbits(esds, col = 'daz_mm_notide_noiono_grad_OK'):
 
 
 
-def decompose_azrg2NEU(frametas):
+def decompose_azrg2NEU(df):
     velrg = 'vel_rg'
     velaz = 'vel_az'
     stdrg = 'std_rg'
@@ -355,21 +355,53 @@ def decompose_azrg2NEU(frametas):
         d.append(row[velaz])
         # for rg:
         incangle = float(row['avg_incidence_angle'])
-        At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(incangle))*np.sin(np.radians(heading)), np.cos(np.radians(incangle))]
+        At = [-np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(incangle))*np.sin(np.radians(heading)), -np.cos(np.radians(incangle))]
         # TODO: check
-        # 
+        #
         Qt.append(1/row[stdrg]**2)
         A.append(At)
         d.append(row[velrg])
+    A = np.array(A)
+    d = np.array(d)
+    Q = np.zeros((len(d), len(d)))
+    np.fill_diagonal(Q, Qt)
+    lstsq = np.linalg.lstsq(A, d, rcond=None)
+    # Qm will be variance for V,E and for V,N
+    try:
+        Qm = np.linalg.inv(A.transpose() @ Q @ A)
+    except:
+        print('matrix for frames listed below is singular! returning 999999999999 for var')
+        print(df['frame'].values)
+        Qm = np.zeros([2, 2])
+        np.fill_diagonal(Qm, 999999999)
+    Qm = np.abs(Qm.diagonal())
+    V_E = lstsq[0][0]
+    V_N = lstsq[0][1]
+    V_U = lstsq[0][2]
+    RMSE_E = np.sqrt(Qm[0])
+    RMSE_N = np.sqrt(Qm[1])
+    RMSE_U = np.sqrt(Qm[2])
+    return pd.DataFrame({'V_N': pd.Series(V_N),
+                         'V_E': pd.Series(V_E),
+                         'V_U': pd.Series(V_U),
+                         'RMSE_E': pd.Series(RMSE_E),
+                         'RMSE_N': pd.Series(RMSE_N),
+                         'RMSE_U': pd.Series(RMSE_U),
+                         })
 
 #function for decomposition (by LS inversion)
-def decompose_azi2NE(df, col = 'daz_mm_notide_noiono_grad'):
+def decompose_azi2NE(df, col = 'daz_mm_notide_noiono_grad', colstd = None):
     velcol = 'slope_'+col+'_mmyear'
-    rmscol = col+'_RMSE_mmy_full'
+    if colstd:
+        rmscol = colstd
+    else:
+        rmscol = col+'_RMSE_mmy_full'
     if not velcol in df.columns:
         #print('workaround for a single column')
         velcol = col
-        rmscol = col
+    if (not velcol in df.columns) or (not rmscol in df.columns):
+        print('cannot continue - no expected column found')
+        return False
     A = []
     d = []
     Qt = []
@@ -548,7 +580,7 @@ def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
     cell_size = 2.25  # this is some ~250x250 km
     '''
     framespd['opass'] = framespd['frame'].str[3]
-    gdf = geopandas.GeoDataFrame(framespd, 
+    gdf = geopandas.GeoDataFrame(framespd,
                 geometry=geopandas.points_from_xy(framespd.center_lon, framespd.center_lat),
                 crs=crs)
     # establish a grid
@@ -560,8 +592,8 @@ def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
     grid_cells = []
     centroid_lon = []
     centroid_lat = []
-    for x0 in np.arange(xmin, xmax+cell_size, cell_size ):
-        for y0 in np.arange(ymin, ymax+cell_size, cell_size):
+    for x0 in np.arange(xmin-cell_size/2, xmax+cell_size/2, cell_size ):
+        for y0 in np.arange(ymin-cell_size/2, ymax+cell_size/2, cell_size):
             # bounds
             x1 = x0-cell_size
             y1 = y0+cell_size
@@ -569,14 +601,14 @@ def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
             centroid_lon.append(x0)
             centroid_lat.append(y0)
     
-    grid = geopandas.GeoDataFrame(grid_cells, columns=['geometry'], 
+    grid = geopandas.GeoDataFrame(grid_cells, columns=['geometry'],
                                      crs=crs)
     grid['centroid_lon'] = centroid_lon
     grid['centroid_lat'] = centroid_lat
-    
+
     # merge framespd and the grid
     merged = geopandas.sjoin(gdf, grid, how='left', op='within')
-    
+
     gridgrouped = merged.groupby('index_right')
     gridagg = gridgrouped.agg(count=('opass', 'count'),
                             opass=('opass', list),
@@ -593,28 +625,55 @@ def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
     
     gridgrouped = merged.groupby('index_right')
     # 2. now do the decomposition
+    # old version:
     col = 'daz_mm_notide_noiono_grad'
     if not col+'_mmyear' in framespd:
         col = 'daz_mm_notide_noiono'
-    decomposed = gridgrouped.apply(decompose_azi2NE, col)
-    gridagg['VEL_N_noTI'] = decomposed['V_N'].values
-    gridagg['VEL_E_noTI'] = decomposed['V_E'].values
-    gridagg['RMSE_VEL_N_noTI'] = decomposed['RMSE_N'].values
-    gridagg['RMSE_VEL_E_noTI'] = decomposed['RMSE_E'].values
-    
-    decomposed = gridgrouped.apply(decompose_azi2NE, 'daz_mm_notide')
-    gridagg['VEL_N_noT'] = decomposed['V_N'].values
-    gridagg['VEL_E_noT'] = decomposed['V_E'].values
-    gridagg['RMSE_VEL_N_noT'] = decomposed['RMSE_N'].values
-    gridagg['RMSE_VEL_E_noT'] = decomposed['RMSE_E'].values
-    
-    '''
-    decomposed = gridgrouped.apply(decompose_azi2NE, 'daz_mm')
-    gridagg['VEL_N'] = decomposed['V_N'].values
-    gridagg['VEL_E'] = decomposed['V_E'].values
-    gridagg['RMSE_VEL_N'] = decomposed['RMSE_N'].values
-    gridagg['RMSE_VEL_E'] = decomposed['RMSE_E'].values
-    '''
+
+    if col in framespd:
+        decomposed = gridgrouped.apply(decompose_azi2NE, col)
+        gridagg['VEL_N_noTI'] = decomposed['V_N'].values
+        gridagg['VEL_E_noTI'] = decomposed['V_E'].values
+        gridagg['RMSE_VEL_N_noTI'] = decomposed['RMSE_N'].values
+        gridagg['RMSE_VEL_E_noTI'] = decomposed['RMSE_E'].values
+
+    col = 'daz_mm_notide'
+    if col+'_mmyear' in framespd:
+        decomposed = gridgrouped.apply(decompose_azi2NE, col)
+        gridagg['VEL_N_noT'] = decomposed['V_N'].values
+        gridagg['VEL_E_noT'] = decomposed['V_E'].values
+        gridagg['RMSE_VEL_N_noT'] = decomposed['RMSE_N'].values
+        gridagg['RMSE_VEL_E_noT'] = decomposed['RMSE_E'].values
+
+    col='daz_mm'
+    if col + '_mmyear' in framespd:
+        decomposed = gridgrouped.apply(decompose_azi2NE, col)
+        gridagg['VEL_N'] = decomposed['V_N'].values
+        gridagg['VEL_E'] = decomposed['V_E'].values
+        gridagg['RMSE_VEL_N'] = decomposed['RMSE_N'].values
+        gridagg['RMSE_VEL_E'] = decomposed['RMSE_E'].values
+
+    # 2025: version starting from dll.get_daz --- and including range vel as well:
+    col = 'vel_az'
+    colstd = 'std_az'
+    if (col in framespd) and (colstd in framespd):
+        decomposed = gridgrouped.apply(decompose_azi2NE, col, colstd)
+        gridagg['VEL_N_daz'] = decomposed['V_N'].values
+        gridagg['VEL_E_daz'] = decomposed['V_E'].values
+        gridagg['RMSE_VEL_N_daz'] = decomposed['RMSE_N'].values
+        gridagg['RMSE_VEL_E_daz'] = decomposed['RMSE_E'].values
+        #
+        col2 = 'vel_rg'
+        colstd2 = 'std_rg'
+        if (col2 in framespd) and (colstd2 in framespd):
+            decomposed = gridgrouped.apply(decompose_azrg2NEU) #, col, colstd)
+            gridagg['VEL_N_dazdrg'] = decomposed['V_N'].values
+            gridagg['VEL_E_dazdrg'] = decomposed['V_E'].values
+            gridagg['VEL_U_dazdrg'] = decomposed['V_U'].values
+            gridagg['RMSE_VEL_N_dazdrg'] = decomposed['RMSE_N'].values
+            gridagg['RMSE_VEL_E_dazdrg'] = decomposed['RMSE_E'].values
+            gridagg['RMSE_VEL_U_dazdrg'] = decomposed['RMSE_U'].values
+    #
     gridagg = gridagg.dropna()
     
     return gridagg
