@@ -63,9 +63,12 @@ maxlat=90
 csvs = glob.glob('????_?????_??????.full*csv')
 for csv in csvs:
     fr = csv.split('.')[0]
-    if 'frame' in frametas:
-        if fr in frametas['frame']:
-            continue
+    try:
+        if 'frame' in frametas:
+            if fr in frametas['frame']:
+                continue
+    except:
+        print('probably new frametas')
     print(fr)
     #fr = '001A_04784_201818'
     #csv = fr+'.full.csv'
@@ -134,7 +137,7 @@ for csv in csvs:
     frametas = pd.concat([frametas, frameta])
 
 frametas = frametas.reset_index(drop=True)
-frametas.to_csv('frametas.txt')
+frametas.to_csv('frametas.aoi.txt')
 
 '''
 def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = True):
