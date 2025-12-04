@@ -91,7 +91,6 @@ for csv in csvs:
     for edt in e.epochdate.values:
         gcs = dll.get_gacos_in_coord(lon, lat, str(edt).replace('-',''), fr, inmm=True, domean=False)
         gcs_mm.append(gcs*(-1))
-    #
     if np.isnan(gcs_mm).sum() >= len(gcs_mm)/2:
         print('skipping gacos')
         epochsdt = e.epochdate.values
