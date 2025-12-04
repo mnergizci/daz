@@ -355,7 +355,10 @@ def decompose_azrg2NEU(df):
         d.append(row[velaz])
         # for rg:
         incangle = float(row['avg_incidence_angle'])
-        At = [-np.sin(np.radians(incangle))*np.cos(np.radians(heading)), np.sin(np.radians(incangle))*np.sin(np.radians(heading)), -np.cos(np.radians(incangle))]
+        # for rg: negative values mean towards satellite (!)
+        At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), # E
+              -np.sin(np.radians(incangle))*np.sin(np.radians(heading)), # N
+              -np.cos(np.radians(incangle))]  # U
         # TODO: check
         #
         Qt.append(1/row[stdrg]**2)
