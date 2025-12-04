@@ -359,7 +359,7 @@ def decompose_azrg2NEU(df):
         At = [np.sin(np.radians(incangle))*np.cos(np.radians(heading)), # E
               -np.sin(np.radians(incangle))*np.sin(np.radians(heading)), # N
               -np.cos(np.radians(incangle))]  # U
-        # TODO: check
+        # checked - signs correct (used https://www.sciencedirect.com/science/article/pii/S0013795217300789 eq 3)
         #
         Qt.append(1/row[stdrg]**2)
         A.append(At)
