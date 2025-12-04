@@ -431,7 +431,11 @@ def get_frameta(frame, perswath=False):
         a['swath_center_lon'] = [lon]
         a['swath_center_lat'] = [lat]
     heading = float(grep1line('heading', metafile).split('=')[1])
-    azimuth_resolution = float(grep1line('azimuth_resolution', metafile).split('=')[1])
+    try:
+        azimuth_resolution = float(grep1line('azimuth_resolution', metafile).split('=')[1])
+    except:
+        print('WARNING, no azi res info in metafile '+metafile)
+        azimuth_resolution = 14.0 #m
     avg_incidence_angle = float(grep1line('avg_incidence_angle', metafile).split('=')[1])
     try:
         centre_range_m = float(grep1line('centre_range_ok_m', metafile).split('=')[1])

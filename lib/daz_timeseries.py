@@ -35,7 +35,7 @@ def estimate_s1ab(frame_esds, col = 'daz_mm_notide_noiono', rmsiter = 50, printo
 # for range, e.g.:
 # e = e[e.cc_range != 0]
 # epochsdt = e.epochdate.values
-# mmvalues = e.cc_range*2300 - e.drg_GACOS_mm_center - e.drg_iono_mm_giri - e.drg_SET_mm
+# mmvalues = e.cc_range*2329.562- e.drg_GACOS_mm_center - e.drg_iono_mm_giri - e.drg_SET_mm
 # v,c,stderr = estimate_slope(epochsdt, mmvalues)
 
 '''
@@ -50,12 +50,25 @@ except:
     print('cannot load frametas - starting from scratch')
     frametas = pd.DataFrame()
 
-csvs = glob.glob('????_?????_??????.full*.csv')
+minlon=50
+maxlon=75
+minlat=23
+maxlat=47
+
+#all
+minlon=-5
+maxlon=175
+minlat=0
+maxlat=90
+csvs = glob.glob('????_?????_??????.full*csv')
 for csv in csvs:
     fr = csv.split('.')[0]
-    if 'frame' in frametas:
-        if fr in frametas['frame'].values:
-            continue
+    try:
+        if 'frame' in frametas:
+            if fr in frametas['frame']:
+                continue
+    except:
+        print('probably new frametas')
     print(fr)
     #fr = '001A_04784_201818'
     #csv = fr+'.full.csv'
@@ -71,6 +84,9 @@ for csv in csvs:
     mstr=frameta.master.values[0]
     lon=frameta.center_lon.values[0]
     lat=frameta.center_lat.values[0]
+    if ~((lon > minlon) and (lon<maxlon) and (lat>minlat) and (lat<maxlat)):
+        print('not in AOI')
+        continue
     gcs_mm = []
     for edt in e.epochdate.values:
         gcs = dll.get_gacos_in_coord(lon, lat, str(edt).replace('-',''), fr, inmm=True, domean=False)
@@ -118,10 +134,10 @@ for csv in csvs:
     frameta['vel_az'] = vaz
     frameta['std_rg'] = stderrrg
     frameta['std_az'] = stderraz
-    frametas = frametas.append(frameta)
+    frametas = pd.concat([frametas, frameta])
 
 frametas = frametas.reset_index(drop=True)
-frametas.to_csv('frametas.txt')
+frametas.to_csv('frametas.aoi.txt')
 
 '''
 def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = True):

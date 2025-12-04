@@ -120,6 +120,7 @@ def main(argv=None):
         if col in esds:
             print('estimating velocities of '+col)
             esds, framespd = df_calculate_slopes(esds, framespd, alpha = 1, eps = 1.35, bycol = col, subset = subset, roll_assist = roll_assist)
+
     #esds, framespd = df_calculate_slopes(esds, framespd, alpha = 1, eps = 1.35, bycol = 'daz_mm_notide_noiono_F2')
     # to back up before continuing:
     print('saving datasets')
