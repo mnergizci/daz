@@ -1006,8 +1006,8 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     euplate = rigidplates[rigidplates['plate_code'] == 'EU']
     #
     workdir = os.getcwd()
-    if type(dec) == type('str'):
-        dec = pd.read_csv(deccsv)
+    #if type(dec) == type('str'):
+    dec = pd.read_csv(deccsv)
     #
     dec = dec[dec['centroid_lon'] > region[0]]
     dec = dec[dec['centroid_lon'] < region[1]]
@@ -1016,7 +1016,7 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     #
     if to_eu:
         if 'eur_E' not in dec:
-            from daz_lib_licsar import get_platemotion_en
+            #from daz_lib_licsar import get_platemotion_en
             dec = get_platemotion_en(dec)
     # dec
     #
