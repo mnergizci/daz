@@ -1016,7 +1016,7 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     #
     if to_eu:
         if 'eur_E' not in dec:
-            #from daz_lib_licsar import get_platemotion_en
+            from daz_lib_licsar import get_platemotion_en
             dec = get_platemotion_en(dec)
     # dec
     #
