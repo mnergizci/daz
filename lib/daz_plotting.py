@@ -1003,10 +1003,12 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     rigidplates = rigidplates.dissolve(by='plate')
     #
     # plates = rigidplates.copy()
-    euplate = rigidplates[plates['plate_code'] == 'EU']
+    euplate = rigidplates[rigidplates['plate_code'] == 'EU']
     #
     workdir = os.getcwd()
-    dec = pd.read_csv(deccsv)
+    if type(dec) == type('str'):
+        dec = pd.read_csv(deccsv)
+    #
     dec = dec[dec['centroid_lon'] > region[0]]
     dec = dec[dec['centroid_lon'] < region[1]]
     dec = dec[dec['centroid_lat'] > region[2]]
