@@ -441,7 +441,7 @@ def decompose_azi2NE(df, col = 'daz_mm_notide_noiono_grad', colstd = None):
 
 
 # get ITRF N, E values
-def get_itrf_gps_EN(df, samplepoints=3, velnc='vel_gps_kreemer.nc', refto='NNR', rowname = 'centroid'):
+def get_itrf_gps_EN(df, samplepoints=3, velnc='vel_gps_kreemer.nc', refto='NNR', rowname = 'centroid', doitrf = True):
     '''Gets EN velocities from ITRF2014 plate motion model (auto-extract from UNAVCO website)
     In case velnc exists, it will be used as well, to generate GPS_N/E.. 
     I prepared the vel_gps_kreemer.nc file from data available in supplementary files of article DOI:10.1002/2014GC005407
@@ -454,6 +454,9 @@ def get_itrf_gps_EN(df, samplepoints=3, velnc='vel_gps_kreemer.nc', refto='NNR',
             print('found velocities nc file - using it instead of ITRF2014')
             vels=xr.open_dataset(velnc)
             usevel = True
+        else:
+            print('no such file - extracting ITRF2014 model instead')
+            doitrf = True
     itrfs_N = []
     itrfs_E = []
     itrfs_rms_N = []
@@ -467,26 +470,31 @@ def get_itrf_gps_EN(df, samplepoints=3, velnc='vel_gps_kreemer.nc', refto='NNR',
     fullcount = len(df)
     for ind, row in df.iterrows():
         iii = iii+1
-        print('getting ITRF for {0}/{1} cells'.format(iii, fullcount))
+        print('getting mean values for {0}/{1} cells'.format(iii, fullcount))
         clon = row[rowname+'_lon']
         clat = row[rowname+'_lat']
-        print('extracting PMM values from ITRF2014')
-        # use a median over 'whole' frame:
-        itrfEs = []
-        itrfNs = []
-        leng=round(clon*10+23.4/2)+1-round(clon*10-23.4/2)
-        for i in range(round(clon*10-23.4/2),round(clon*10+23.4/2)+1,int(leng/samplepoints)):
-            lon = i/10
-            for j in range(round(clat*10-23.4/2),round(clat*10+23.4/2)+1,int(leng/samplepoints)):
-                lat = j/10
-                try:
-                    itrfE, itrfN = get_ITRF_ENU(lat, lon, refto=refto)
-                    #itrfE, itrfN = 0,0 #debug
-                    itrfEs.append(itrfE)
-                    itrfNs.append(itrfN)
-                    #itrfs.append(EN2azi(N, E, heading))
-                except:
-                    print('connection error')
+        if doitrf:
+            print('extracting PMM values from ITRF2014')
+            # use a median over 'whole' frame:
+            itrfEs = []
+            itrfNs = []
+            leng=round(clon*10+23.4/2)+1-round(clon*10-23.4/2)
+            for i in range(round(clon*10-23.4/2),round(clon*10+23.4/2)+1,int(leng/samplepoints)):
+                lon = i/10
+                for j in range(round(clat*10-23.4/2),round(clat*10+23.4/2)+1,int(leng/samplepoints)):
+                    lat = j/10
+                    try:
+                        itrfE, itrfN = get_ITRF_ENU(lat, lon, refto=refto)
+                        #itrfE, itrfN = 0,0 #debug
+                        itrfEs.append(itrfE)
+                        itrfNs.append(itrfN)
+                        #itrfs.append(EN2azi(N, E, heading))
+                    except:
+                        print('connection error')
+            itrfs_E.append(np.mean(itrfEs))
+            itrfs_N.append(np.mean(itrfNs))
+            itrfs_rms_E.append(np.std(itrfEs, ddof=1))
+            itrfs_rms_N.append(np.std(itrfNs, ddof=1))
         if usevel:
             print('extracting PMM values from GPS stations')
             gps1_E = vels.sel(lon=slice(clon-125/111, clon+125/111), lat=slice(clat-125/111, clat+125/111)).VEL_E #.values
@@ -495,14 +503,11 @@ def get_itrf_gps_EN(df, samplepoints=3, velnc='vel_gps_kreemer.nc', refto='NNR',
             GPS_N.append(float(gps1_N.mean()))
             GPS_rms_E.append(float(gps1_E.std(ddof=1)))
             GPS_rms_N.append(float(gps1_N.std(ddof=1)))
-        itrfs_E.append(np.mean(itrfEs))
-        itrfs_N.append(np.mean(itrfNs))
-        itrfs_rms_E.append(np.std(itrfEs,ddof=1))
-        itrfs_rms_N.append(np.std(itrfNs,ddof=1))
-    df['ITRF_N'] = itrfs_N
-    df['ITRF_E'] = itrfs_E
-    df['ITRF_RMSE_E'] = itrfs_rms_E
-    df['ITRF_RMSE_N'] = itrfs_rms_N
+    if doitrf:
+        df['ITRF_N'] = itrfs_N
+        df['ITRF_E'] = itrfs_E
+        df['ITRF_RMSE_E'] = itrfs_rms_E
+        df['ITRF_RMSE_N'] = itrfs_rms_N
     if usevel:
         df['GPS_N'] = GPS_N
         df['GPS_E'] = GPS_E
@@ -580,7 +585,7 @@ def get_std_diff(diff):
 
 def decompose_framespd(framespd, cell_size = 2.25, crs = "EPSG:4326"):
     '''
-    cell_size = 2.25  # this is some ~250x250 km
+    cell_size = 2.25  # this is some ~230x230 km
     '''
     framespd['opass'] = framespd['frame'].str[3]
     gdf = geopandas.GeoDataFrame(framespd,
@@ -910,6 +915,57 @@ def get_pod_offset(dazes, years, thresyears = 4, minsamples = 15):
     model = np.linalg.lstsq(A,dazes, rcond=False)[0]
     offset = model[2] - model[1]
     return offset
+
+
+def interpolate_gnss_data(gnssdat, outresdeg = 1):
+    ''' output as expected for step 06 (like vel_gnss_kreemer.nc)
+    ready to be used based on https://github.com/earjcr1/AHB_GPS '''
+    # gnssdat = 'ahbgps_v6pt4_2D_29-Nov-2025_itrf14.dat'
+    ## based on https://www.fatiando.org/verde/latest/tutorials/weights.html
+    import pyproj
+    import verde as vd
+    import xarray as xr
+    #
+    data = pd.read_csv(gnssdat, sep='\ ')
+    projection = pyproj.Proj(proj="merc", lat_ts=data.lat.mean())
+    coordinates = (data.lon.values, data.lat.values)
+    proj_coords = projection(data.lon.values, data.lat.values)
+    #
+    region = vd.get_region(coordinates)
+    spacing = outresdeg
+    splinefunc = vd.Chain(
+        [
+            # Convert the spacing to meters because Spline is a Cartesian gridder
+            ("mean", vd.BlockMean(spacing=spacing * 111e3, uncertainty=True)),
+            ("spline", vd.Spline(damping=1e-10)),
+        ]
+    )
+    #
+    out = xr.Dataset()
+    for vdir in ['east', 'north']:
+        print('interpolating '+vdir)
+        col = 'v'+vdir
+        if not col in data:
+            col = col+'_eu'
+            if not col in data:
+                print('error, no '+col+' in the input data, cancelling')
+                return False
+        scol='s'+vdir
+        weights = 1/data[scol]**2
+        spline=splinefunc.fit(proj_coords, data[col], weights)
+        outname = "VEL_"+vdir[0].upper()
+        grid = spline.grid(
+            region=region,
+            spacing=spacing,
+            projection=projection,
+            dims=["lat", "lon"],
+            data_names=outname,
+        )
+        # Avoid showing interpolation outside of the convex hull of the data points.
+        grid = vd.convexhull_mask(coordinates, grid=grid, projection=projection)
+        out[outname] = grid[outname]
+    return out
+
 
 '''
 # used as:

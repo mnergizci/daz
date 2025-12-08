@@ -132,6 +132,27 @@ def extract2txt_esds_frame(frame, fix_epoch_time = False, datemin=dt.date(2014,1
     return a[cols]
 
 
+def get_platemotion_en(df, collon = 'centroid_lon', collat = 'centroid_lat', outcolnm='eur', plate = 'Eurasia'):
+    import licsbas_mintpy_PMM as pmm
+    #
+    # getting plate data
+    plate = pmm.ITRF2014_PMM[plate]
+    pole_obj = pmm.EulerPole(
+        wx=plate.omega_x,
+        wy=plate.omega_y,
+        wz=plate.omega_z,
+        unit='mas/yr',
+    )
+    #
+    lats = np.array(df[collat].values)
+    lons = np.array(df[collon].values)
+    # finally getting the plate velocities from the Euler pole definition over the frame area
+    ve, vn, vu = pole_obj.get_velocity_enu(lats, lons, alt=0.0, ellps=True)
+    df[outcolnm+'_E'] = ve*1000
+    df[outcolnm + '_N'] = vn*1000 # in mm/y
+    return df
+
+
 def get_daz_frame(frame, fulloutput = True, include_corrections = False, use_iri_hei = False, corr_per_swath = True,
                   datemin=dt.date(2014,10,1), datemax=dt.date.today()):
     ''' Function to extract all frame daz values from the LiCSInfo database.

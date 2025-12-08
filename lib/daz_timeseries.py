@@ -65,7 +65,7 @@ for csv in csvs:
     fr = csv.split('.')[0]
     try:
         if 'frame' in frametas:
-            if fr in frametas['frame']:
+            if fr in frametas['frame'].values:
                 continue
     except:
         print('probably new frametas')
@@ -136,7 +136,7 @@ for csv in csvs:
     frametas = pd.concat([frametas, frameta])
 
 frametas = frametas.reset_index(drop=True)
-frametas.to_csv('frametas.aoi.txt')
+frametas.to_csv('frametas.ok.ok.txt')
 
 '''
 def estimate_slope(epochsdt, mmvalues, rmsiter=5, target_rmse=30, printout = True):

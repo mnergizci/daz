@@ -86,10 +86,19 @@ def main(argv=None):
     framespd = pd.read_csv(inframesfile)
     print('decomposing frames')
     gridagg = decompose_framespd(framespd, cell_size = outres)
-    print('getting ITRF 2014 PMM for new cells')
+    #print('getting ITRF 2014 PMM for new cells')
     if os.path.exists(velnc):
-        print('also extracting values from the available GNSS-based grid')
-    gridagg = get_itrf_gps_EN(gridagg, samplepoints=3, velnc=velnc, refto='NNR', rowname = 'centroid')
+        print('Extracting values from the available GNSS-based grid')
+        doitrf = False
+    else:
+        print('getting ITRF 2014 PMM for new cells')
+    gridagg = get_itrf_gps_EN(gridagg, samplepoints=3, velnc=velnc, refto='NNR', rowname = 'centroid', doitrf = doitrf)
+    # adding Eurasia for later corrections
+    try:
+        from daz_lib_licsar import get_platemotion_en
+        gridagg = get_platemotion_en(gridagg)
+    except:
+        print('warning, velocity of Eurasia not calculated ok, not using')
     print('exporting final decomposed data to '+outdecfile)
     gridagg.to_csv(outdecfile)
     print('done')
