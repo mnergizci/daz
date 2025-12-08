@@ -1003,7 +1003,7 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     rigidplates = rigidplates.dissolve(by='plate')
     #
     # plates = rigidplates.copy()
-    euplate = rigidplates[rigidplates['plate_code'] == 'EU']
+    # euplate = rigidplates[rigidplates['plate_code'] == 'EU']
     #
     workdir = os.getcwd()
     #if type(dec) == type('str'):
@@ -1127,7 +1127,7 @@ def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/share
     )
     # plot faults to the background
     fig.plot(data=faults, pen="0.15p,darkgray", label="faults")
-    fig.plot(data=euplate, pen="0.6p,black", label="Eurasia")
+    #fig.plot(data=euplate, pen="0.6p,black", label="Eurasia")
     # first plot uncertainties (background)
     fig.velo(
         data=df_unc,
