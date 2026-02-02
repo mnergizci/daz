@@ -74,6 +74,68 @@ def EN2azi(N, E, heading = -169):
     return E*np.sin(alpha)+N*np.cos(alpha)
 
 
+def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
+    """
+    Calculates PDOP, HDOP_E, HDOP_N, VDOP given lists of elevation and azimuth angles.
+
+    Args:
+        elevation_angles_deg (list or numpy array): List of elevation angles in degrees.
+        azimuth_angles_deg (list or numpy array): List of azimuth angles in degrees.
+
+    Returns:
+        tuple: (PDOP, HDOP_E, HDOP_N, VDOP) or (None, ...) if N is singular or insufficient obs.
+    """
+    if len(elevation_angles_deg) != len(azimuth_angles_deg):
+        raise ValueError("Elevation and azimuth angle lists must have the same length.")
+    #
+    num_observations = len(elevation_angles_deg)
+    if num_observations < 3:
+        print("Warning: At least 3 observations are needed to calculate 3D position DOPs.")
+        return None, None, None, None
+    #
+    # Convert angles to radians
+    elevations_rad = np.deg2rad(elevation_angles_deg)
+    azimuths_rad = np.deg2rad(azimuth_angles_deg)
+    #
+    G = np.zeros((num_observations, 3))  # 3 for dx, dy, dz
+    #
+    for i in range(num_observations):
+        el = elevations_rad[i]
+        az = azimuths_rad[i]
+        # Components of the unit vector from receiver to source in local ENU frame
+        # (East, North, Up)
+        e_x = np.sin(el) * np.cos(az)
+        e_y = np.sin(el) * np.sin(az)
+        e_z = np.cos(el)
+        #
+        # Populate G-matrix row
+        G[i, 0] = -e_x  # Partial derivative wrt East
+        G[i, 1] = -e_y  # Partial derivative wrt North
+        G[i, 2] = -e_z  # Partial derivative wrt Up
+        #G[i, 3] = 1.0  # Partial derivative wrt clock bias (c*dt)
+    #
+    # Calculate Normal Matrix: N = G^T * G
+    N = G.T @ G
+    #
+    # Invert Normal Matrix: C = N^-1
+    try:
+        C = np.linalg.inv(N)
+    except np.linalg.LinAlgError:
+        print("Error: Normal matrix is singular. Poor geometry (e.g., sources are coplanar).")
+        return None, None, None, None, None
+    #
+    # Extract DOPs from the diagonal elements of C
+    # GDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2] + C[3, 3])
+    PDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2])
+    HDOP_E = np.sqrt(C[0, 0])
+    HDOP_N = np.sqrt(C[1, 1])  # Assuming C[0,0] is East, C[1,1] is North
+    VDOP = np.sqrt(C[2, 2])
+    #TDOP = np.sqrt(C[3, 3])
+    #
+    return PDOP, HDOP_E, HDOP_N, VDOP
+
+
+
 def heading2EN_lookvector(heading): # e.g. heading = -169
     # sensitivities to E, N. i.e. d_{azi} = E*sin(heading)+N*cos(heading)
     E, N = np.sin(np.radians(heading)), np.cos(np.radians(heading))
