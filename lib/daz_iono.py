@@ -183,7 +183,7 @@ def get_tecs(glat, glon, altitude, acq_times, returnhei = False, source='jpl', a
 
 
 
-def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono'):
+def download_code_data(acqtime, storedir = '/gws/ssde/j25a/nceo_geohazards/vol1/code_iono'):
     """Downloads Ionospheric TEC data from JPL or CODE."""
     ffound = False
     if not ffound:
@@ -260,7 +260,7 @@ def download_code_data(acqtime, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/c
     return ionix
 
 
-def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False, noJPL=False, printout=True):
+def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/ssde/j25a/nceo_geohazards/vol1/code_iono', return_fullxr = False, noJPL=False, printout=True):
     """ Adapted from Reza Bordbari script, plus using functions from https://notebook.community/daniestevez/jupyter_notebooks/IONEX
     
     17/03/2025-(MN):function also helps to extract NASA JPL High Resolution vTEC values (15min, 1x1degree) at first. 
@@ -361,7 +361,7 @@ def get_vtec_from_code(acqtime, lat = 0, lon = 0, storedir = '/gws/nopw/j04/nceo
         return get_vtec_from_tecxr(tecxr, acqtime, lat, lon)
 
 
-# get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/nopw/j04/nceo_geohazards_vol1/code_iono', return_fullxr = False):
+# get_vtec_from_code(acqtime, lat, lon, storedir = '/gws/ssde/j25a/nceo_geohazards/vol1/code_iono', return_fullxr = False):
 def get_vtec_from_tecxr(tecxr, acqtime, lat, lon, rotate=True, method='cubic'):
     '''
     This will get VTEC from the xr TEC dataset for given acqtime (dt.datetime or pd.Timestamp), lat, lon.

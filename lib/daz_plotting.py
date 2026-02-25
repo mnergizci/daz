@@ -982,7 +982,7 @@ def plot_daz_frame_licsar(frame, limit = 8000, newold=True):
 
 
 
-def create_article_fig(deccsv = '/gws/nopw/j04/nceo_geohazards_vol1/public/shared/temp/earmla/esds.202512/decomposed.ok.ok.weeded.225.csv',
+def create_article_fig(deccsv = '/gws/ssde/j25a/nceo_geohazards/vol1/public/shared/temp/earmla/esds.202512/decomposed.ok.ok.weeded.225.csv',
                        region=[25, 113, 22, 45], strTI='dazdrg', to_eu = False, dpi=120):
     import pandas as pd
     import pyproj
