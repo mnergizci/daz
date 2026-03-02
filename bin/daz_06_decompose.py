@@ -20,6 +20,7 @@ Usage
 daz_06_decompose.py [--infra frames_final.csv] [--outdec decomposed.csv] [--velnc vel_gps_kreemer.nc] [--outres 2.25]
 
 Note: param velnc is optional, but if provided as nc file with VEL_E, VEL_N variables, it will be used as GPS velocities.
+If not provided or vel_gps_kreemer.nc does not exist, it will extract ITRF2014 PMM instead.
 outres stands for output resolution - how large grid cell size (default: 2.25 deg)
 
 """
@@ -92,6 +93,7 @@ def main(argv=None):
         doitrf = False
     else:
         print('getting ITRF 2014 PMM for new cells')
+        doitrf = True
     gridagg = get_itrf_gps_EN(gridagg, samplepoints=3, velnc=velnc, refto='NNR', rowname = 'centroid', doitrf = doitrf)
     # adding Eurasia for later corrections
     try:
