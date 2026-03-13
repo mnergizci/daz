@@ -106,9 +106,9 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
         az = azimuths_rad[i]
         # Components of the unit vector from receiver to source in ENU frame
         # (East, North, Up)
-        e_e = -np.sin(el) * np.cos(az)
-        e_n = np.sin(el) * np.sin(az)
-        e_u = np.cos(el)
+        e_e = np.cos(el) * np.sin(az)
+        e_n = np.cos(el) * np.cos(az)
+        e_u = np.sin(el)
         #
         # Populate G-matrix row
         G[i, 0] = -e_e  # Partial derivative wrt East
@@ -129,7 +129,7 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     # Extract DOPs from the diagonal elements of C
     # GDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2] + C[3, 3])
     PDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2])
-    HDOP_N = np.sqrt(C[0, 0])  # WEIRD! the N/E are switched. is C[0,0] really East? N seems more correct
+    HDOP_E = np.sqrt(C[0, 0])
     HDOP_E = np.sqrt(C[1, 1])
     VDOP = np.sqrt(C[2, 2])
     #TDOP = np.sqrt(C[3, 3])
