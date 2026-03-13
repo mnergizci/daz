@@ -77,6 +77,8 @@ def EN2azi(N, E, heading = -169):
 def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     """
     Calculates PDOP, HDOP_E, HDOP_N, VDOP given lists of elevation and azimuth angles.
+    Note - these are elevation angles, not incidence angles... (90-inc_deg),
+           azimuth is the horizonotal angle from which target is observed, measured from N
 
     Args:
         elevation_angles_deg (list or numpy array): List of elevation angles in degrees.
@@ -102,16 +104,16 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     for i in range(num_observations):
         el = elevations_rad[i]
         az = azimuths_rad[i]
-        # Components of the unit vector from receiver to source in local ENU frame
+        # Components of the unit vector from receiver to source in ENU frame
         # (East, North, Up)
-        e_x = np.sin(el) * np.cos(az)
-        e_y = np.sin(el) * np.sin(az)
-        e_z = np.cos(el)
+        e_e = -np.sin(el) * np.cos(az)
+        e_n = np.sin(el) * np.sin(az)
+        e_u = np.cos(el)
         #
         # Populate G-matrix row
-        G[i, 0] = -e_x  # Partial derivative wrt East
-        G[i, 1] = -e_y  # Partial derivative wrt North
-        G[i, 2] = -e_z  # Partial derivative wrt Up
+        G[i, 0] = -e_e  # Partial derivative wrt East
+        G[i, 1] = -e_n  # Partial derivative wrt North
+        G[i, 2] = -e_u  # Partial derivative wrt Up
         #G[i, 3] = 1.0  # Partial derivative wrt clock bias (c*dt)
     #
     # Calculate Normal Matrix: N = G^T * G
@@ -127,8 +129,8 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     # Extract DOPs from the diagonal elements of C
     # GDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2] + C[3, 3])
     PDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2])
-    HDOP_E = np.sqrt(C[0, 0])
-    HDOP_N = np.sqrt(C[1, 1])  # Assuming C[0,0] is East, C[1,1] is North
+    HDOP_N = np.sqrt(C[0, 0])  # WEIRD! the N/E are switched. is C[0,0] really East? N seems more correct
+    HDOP_E = np.sqrt(C[1, 1])
     VDOP = np.sqrt(C[2, 2])
     #TDOP = np.sqrt(C[3, 3])
     #
