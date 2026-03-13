@@ -74,16 +74,16 @@ def EN2azi(N, E, heading = -169):
     return E*np.sin(alpha)+N*np.cos(alpha)
 
 
-def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
+def calculate_dops(elevation_angles_deg, azimuth_angles_deg, sigmas = None):
     """
     Calculates PDOP, HDOP_E, HDOP_N, VDOP given lists of elevation and azimuth angles.
     Note - these are elevation angles, not incidence angles... (90-inc_deg),
-           azimuth is the horizonotal angle from which target is observed, measured from N
+           azimuth is the horizonotal angle from which target is observed, measured from N (so heading +-90, depending on look direction)
 
     Args:
         elevation_angles_deg (list or numpy array): List of elevation angles in degrees.
         azimuth_angles_deg (list or numpy array): List of azimuth angles in degrees.
-
+        sigmas (list or numpy array): List of stddev (or RMSE) - optional
     Returns:
         tuple: (PDOP, HDOP_E, HDOP_N, VDOP) or (None, ...) if N is singular or insufficient obs.
     """
@@ -117,8 +117,13 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
         #G[i, 3] = 1.0  # Partial derivative wrt clock bias (c*dt)
     #
     # Calculate Normal Matrix: N = G^T * G
-    N = G.T @ G
-    #
+    if type(sigmas) == type(None):
+        N = G.T @ G
+    else:
+        sigmas = np.array(sigmas)
+        W = np.diag(1.0 / (sigmas ** 2))
+        N = G.T @ W @ G
+    
     # Invert Normal Matrix: C = N^-1
     try:
         C = np.linalg.inv(N)
@@ -130,7 +135,7 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     # GDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2] + C[3, 3])
     PDOP = np.sqrt(C[0, 0] + C[1, 1] + C[2, 2])
     HDOP_E = np.sqrt(C[0, 0])
-    HDOP_E = np.sqrt(C[1, 1])
+    HDOP_N = np.sqrt(C[1, 1])
     VDOP = np.sqrt(C[2, 2])
     #TDOP = np.sqrt(C[3, 3])
     #
