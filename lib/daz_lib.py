@@ -118,6 +118,10 @@ def calculate_dops(elevation_angles_deg, azimuth_angles_deg):
     #
     # Calculate Normal Matrix: N = G^T * G
     N = G.T @ G
+    # or with sigmas:
+    # W = diag(1/σ1^2, 1/σ2^2, 1/σ3^2)
+    # N = H^T * W * H
+    # C = inverse(N)
     #
     # Invert Normal Matrix: C = N^-1
     try:
