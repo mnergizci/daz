@@ -101,7 +101,8 @@ def extract2txt_esds_all_frames(framelist, outfile='esds.txt', fix_epoch_time = 
     for frame in framelist:
         try:
             a=extract2txt_esds_frame(frame, fix_epoch_time = fix_epoch_time)
-            dazes=dazes.append(a)
+            #dazes=dazes.append(a)
+            dazes = pd.concat([dazes, a], ignore_index=True)
         except:
             print('frame '+frame+' is empty')
     dazes=dazes.reset_index(drop=True)
@@ -913,7 +914,10 @@ def fix_oldorb_shift_oneoff(frame, tmpdir = '/work/scratch-pw3/licsar/earmla/tem
             if azishift_SD == np.nan:
                 azishift_SD = daz_sd
             if azishift_SD != np.nan:
-                table = table.append({'epoch':int(epoch), 'mdate': mdate, 'RSLC3': rslc3, 'azshift_SD': azishift_SD, 'daz_SD': daz_sd, 'daz_ICC': daz_icc, 'dr_ICC': dr_icc}, ignore_index=True)
+                # table = table.append({'epoch':int(epoch), 'mdate': mdate, 'RSLC3': rslc3, 'azshift_SD': azishift_SD, 'daz_SD': daz_sd, 'daz_ICC': daz_icc, 'dr_ICC': dr_icc}, ignore_index=True)
+                newpdline = pd.DataFrame({'epoch': [int(epoch)], 'mdate': [mdate], 'RSLC3': [rslc3], 'azshift_SD': [azishift_SD], 'daz_SD': [daz_sd],
+                     'daz_ICC': [daz_icc], 'dr_ICC': [dr_icc]})
+                table = pd.concat([table, newpdline], ignore_index=True)
     #
     table['epochdate'] = table.epoch.astype(int).astype(str)
     if not table.empty:
@@ -954,9 +958,10 @@ def fix_oldorb_shift_oneoff(frame, tmpdir = '/work/scratch-pw3/licsar/earmla/tem
             daz_sd = row.daz
             daz_icc = row.cc_azi
             dr_icc = row.cc_range
-            table = table.append({'epoch':int(epoch), 'mdate': mdate, 
-            'RSLC3': rslc3, 'azshift_SD': azishift_SD, 'daz_SD': daz_sd, 
-            'daz_ICC': daz_icc, 'dr_ICC': dr_icc, 'epochdate': row.epoch}, ignore_index=True)
+            newpdline = pd.DataFrame({'epoch':[int(epoch)], 'mdate': [mdate],
+            'RSLC3': [rslc3], 'azshift_SD': [azishift_SD], 'daz_SD': [daz_sd],
+            'daz_ICC': [daz_icc], 'dr_ICC': [dr_icc], 'epochdate': [row['epoch']]})
+            table = pd.concat([table, newpdline], ignore_index=True)
         # get epochs 'to correct', i.e. that used old orb files, and if they were used for RSLC3:
         #tocorrectepochs = []
     O = table[table['epoch']<20200729]
@@ -1180,7 +1185,9 @@ def get_table_azishifts(frame):
         if os.path.exists(ltfile) and os.path.exists(offile):
             azishift, rgshift = get_azshift_lt(ltfile, offile)
             azishift_SD = get_azshift_SD(offile)
-            table = table.append({'epoch':epoch, 'azshift_RDC_ICC': azishift, 'rgshift_RDC_ICC': rgshift, 'azshift_SD': azishift_SD, 'daz_ICC': daz_icc, 'dr_ICC': dr_icc}, ignore_index=True)
+            newpdline = pd.DataFrame({'epoch':[epoch], 'azshift_RDC_ICC': [azishift], 'rgshift_RDC_ICC': [rgshift],
+                                      'azshift_SD': [azishift_SD], 'daz_ICC': [daz_icc], 'dr_ICC': [dr_icc]})
+            table = pd.concat([table, newpdline], ignore_index=True)
         else:
             print('files not extracted correctly, skipping epoch '+epoch)
         rc = os.system('rm -rf {0}/*'.format(tmpdir))
