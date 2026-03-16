@@ -284,6 +284,7 @@ def plot_vel_esd_gmt(selected_frame_esds, frameta, mindate, maxdate, level1, lev
     return fig
 
 
+
 def figpart_var(level, esdspart, frameta, fig, additrf=False, plotstd=False):
     '''
     Level should be one of ['tide', 'iono', 'final']
