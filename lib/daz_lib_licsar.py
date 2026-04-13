@@ -366,7 +366,7 @@ def get_param_gamma(param, parfile, floatt = True, pos = 0):
         a = float(a)
     return a
 
-
+# orig function - now in framecare
 def get_frame_master_s1ab(frame):
     tr = int(frame[:3])
     metafile = os.path.join(os.environ['LiCSAR_public'], str(tr), frame, 'metadata', 'metadata.txt')

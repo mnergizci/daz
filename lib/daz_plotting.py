@@ -957,7 +957,7 @@ def plot_daz_frame_licsar(frame, limit = 8000, newold=True):
     import numpy as np
     if not newold:
         toplotA = dazes[dazes['AB']=='A'].set_index('epoch').daz*14000
-        toplotB = dazes[dazes['AB']=='B'].set_index('epoch').daz*14000
+        toplotB = dazes[dazes['AB']!='A'].set_index('epoch').daz*14000
         toplotA=toplotA[np.abs(toplotA)<limit]
         toplotB=toplotB[np.abs(toplotB)<limit]
         if not toplotA.empty:
@@ -970,9 +970,9 @@ def plot_daz_frame_licsar(frame, limit = 8000, newold=True):
         dazesep['pod_diff_mm']=azioffs.set_index('epochdate')['pod_diff_azi_mm']
         dazesep['pod_diff_mm']=dazesep['pod_diff_mm'].fillna(0)
         toplotA = dazesep[dazesep['AB']=='A'].daz*14000
-        toplotB = dazesep[dazesep['AB']=='B'].daz*14000
+        toplotB = dazesep[dazesep['AB']!='A'].daz*14000
         toplotA=toplotA+dazesep[dazesep['AB']=='A'].pod_diff_mm
-        toplotB=toplotB+dazesep[dazesep['AB']=='B'].pod_diff_mm
+        toplotB=toplotB+dazesep[dazesep['AB']!='A'].pod_diff_mm
         toplotA=toplotA[np.abs(toplotA)<limit]
         toplotB=toplotB[np.abs(toplotB)<limit]
         title='azioff (PODdiff-corrected): '+frame
